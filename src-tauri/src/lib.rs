@@ -3,17 +3,19 @@ mod runner;
 
 use runner::Runner;
 use tauri::ipc::{Channel, InvokeResponseBody};
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 #[tauri::command]
 fn start_run(
+    app: AppHandle,
     runner: State<Runner>,
     flags: Vec<String>,
     cols: u16,
     rows: u16,
     on_stream: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
-    runner.start(flags, cols, rows, on_stream)
+    let log_dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("logs");
+    runner.start(flags, cols, rows, &log_dir, on_stream)
 }
 
 #[tauri::command]

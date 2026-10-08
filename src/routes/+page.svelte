@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke, Channel } from "@tauri-apps/api/core";
+  import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import "@xterm/xterm/css/xterm.css";
@@ -21,6 +22,7 @@
   let unmatched = $state<UnmatchedResult[]>([]);
   let degraded = $state(false);
   let now = $state(Date.now());
+  let logPath = $state<string | null>(null);
   let receivedOutput = false;
   let summarySeen = false;
   let runIsDry = false;
@@ -44,6 +46,7 @@
   function handleEvent(e: StreamEvent) {
     switch (e.kind) {
       case "started":
+        logPath = e.logPath;
         running = true;
         status = "Running…";
         break;
@@ -121,6 +124,7 @@
     steps = [];
     unmatched = [];
     degraded = false;
+    logPath = null;
     receivedOutput = false;
     summarySeen = false;
     runIsDry = dryRun;
@@ -204,6 +208,9 @@
     <label><input type="checkbox" bind:checked={assumeYes} disabled={running} /> -y</label>
     <label><input type="checkbox" bind:checked={dryRun} disabled={running} /> --dry-run</label>
     <span class="status">{status}</span>
+    {#if logPath}
+      <button onclick={() => revealItemInDir(logPath!)} title={logPath}>Show log</button>
+    {/if}
   </header>
   {#if degraded}
     <div class="banner">

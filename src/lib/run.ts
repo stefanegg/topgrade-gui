@@ -5,7 +5,7 @@ export type PromptKind = "retry" | "yesNo" | "password";
 
 /** Events interleaved with output bytes on the run stream (see runner.rs / parser.rs). */
 export type StreamEvent =
-  | { kind: "started" }
+  | { kind: "started"; logPath: string | null }
   | { kind: "exited"; code: number | null }
   | { kind: "error"; message: string }
   | { kind: "stepStarted"; index: number; name: string }

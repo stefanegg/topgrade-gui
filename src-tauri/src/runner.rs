@@ -2,7 +2,9 @@
 //! interleaved with parser events on the same channel so their order relative
 //! to the output is preserved.
 
+use std::fs::{self, File};
 use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -22,7 +24,11 @@ const STOP_GRACE: Duration = Duration::from_secs(5);
 #[derive(Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum RunEvent {
-    Started,
+    #[serde(rename_all = "camelCase")]
+    Started {
+        /// Raw output is saved here; `None` if the file couldn't be created.
+        log_path: Option<String>,
+    },
     Exited { code: Option<u32> },
     Error { message: String },
 }
@@ -46,6 +52,7 @@ impl Runner {
         flags: Vec<String>,
         cols: u16,
         rows: u16,
+        log_dir: &Path,
         stream: Channel<InvokeResponseBody>,
     ) -> Result<(), String> {
         if let Some(bad) = flags.iter().find(|f| !ALLOWED_FLAGS.contains(&f.as_str())) {
@@ -78,7 +85,14 @@ impl Runner {
             *next
         };
 
-        send_event(&stream, &RunEvent::Started);
+        // Logging is best-effort: a run must not fail because of it.
+        let log_path = log_file_path(log_dir, &flags);
+        let mut log = fs::create_dir_all(log_dir).and_then(|_| File::create(&log_path)).ok();
+        send_event(
+            &stream,
+            &RunEvent::Started { log_path: log.as_ref().map(|_| log_path.display().to_string()) },
+        );
+
         let output = stream.clone();
         let reader_thread = thread::spawn(move || {
             let mut parser = Parser::default();
@@ -88,6 +102,11 @@ impl Runner {
                     Ok(0) | Err(_) => break,
                     Ok(n) => n,
                 };
+                if let Some(file) = log.as_mut() {
+                    if file.write_all(&buf[..n]).is_err() {
+                        log = None;
+                    }
+                }
                 // Split the chunk at each event so the frontend sees the
                 // event exactly after the output that triggered it.
                 let mut sent = 0;
@@ -169,6 +188,14 @@ impl Runner {
             let _ = run.killer.kill();
         }
     }
+}
+
+/// `<dir>/2026-10-08T21-30-00-macos[-dry-run].log`: raw PTY bytes, usable as
+/// parser fixtures and for replay.
+fn log_file_path(dir: &Path, flags: &[String]) -> PathBuf {
+    let stamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S");
+    let dry = if flags.iter().any(|f| f == "--dry-run" || f == "-n") { "-dry-run" } else { "" };
+    dir.join(format!("{stamp}-{}{dry}.log", std::env::consts::OS))
 }
 
 fn send_bytes(stream: &Channel<InvokeResponseBody>, bytes: &[u8]) {
