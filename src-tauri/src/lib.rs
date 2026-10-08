@@ -1,0 +1,47 @@
+mod runner;
+
+use runner::{RunEvent, Runner};
+use tauri::ipc::{Channel, InvokeResponseBody};
+use tauri::{Manager, State};
+
+#[tauri::command]
+fn start_run(
+    runner: State<Runner>,
+    flags: Vec<String>,
+    cols: u16,
+    rows: u16,
+    on_output: Channel<InvokeResponseBody>,
+    on_event: Channel<RunEvent>,
+) -> Result<(), String> {
+    runner.start(flags, cols, rows, on_output, on_event)
+}
+
+#[tauri::command]
+fn write_input(runner: State<Runner>, data: String) -> Result<(), String> {
+    runner.write(&data)
+}
+
+#[tauri::command]
+fn resize_pty(runner: State<Runner>, cols: u16, rows: u16) -> Result<(), String> {
+    runner.resize(cols, rows)
+}
+
+#[tauri::command]
+fn stop_run(runner: State<Runner>) -> Result<(), String> {
+    runner.stop()
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .manage(Runner::default())
+        .invoke_handler(tauri::generate_handler![start_run, write_input, resize_pty, stop_run])
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                app.state::<Runner>().kill();
+            }
+        });
+}
