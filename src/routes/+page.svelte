@@ -4,11 +4,8 @@
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import "@xterm/xterm/css/xterm.css";
-
-  type RunEvent =
-    | { kind: "started" }
-    | { kind: "exited"; code: number | null }
-    | { kind: "error"; message: string };
+  import Sidebar from "$lib/Sidebar.svelte";
+  import type { Step, StreamEvent, UnmatchedResult } from "$lib/run";
 
   let termEl: HTMLDivElement;
   let term: Terminal;
@@ -20,6 +17,14 @@
   let assumeYes = $state(false);
   let dryRun = $state(false);
 
+  let steps = $state<Step[]>([]);
+  let unmatched = $state<UnmatchedResult[]>([]);
+  let degraded = $state(false);
+  let now = $state(Date.now());
+  let receivedOutput = false;
+  let summarySeen = false;
+  let runIsDry = false;
+
   function flags(): string[] {
     const f: string[] = [];
     if (cleanup) f.push("--cleanup");
@@ -28,24 +33,108 @@
     return f;
   }
 
+  function finishRunningStep() {
+    const last = steps.at(-1);
+    if (last?.state === "running") {
+      last.state = "done";
+      last.endedAt = Date.now();
+    }
+  }
+
+  function handleEvent(e: StreamEvent) {
+    switch (e.kind) {
+      case "started":
+        running = true;
+        status = "Running…";
+        break;
+      case "stepStarted": {
+        finishRunningStep();
+        steps.push({
+          name: e.name,
+          state: "running",
+          reason: null,
+          startedAt: Date.now(),
+          endedAt: null,
+          needsInput: false,
+          marker: term.registerMarker(0) ?? null,
+        });
+        break;
+      }
+      case "summaryStarted":
+        finishRunningStep();
+        summarySeen = true;
+        break;
+      case "stepResult": {
+        const step = e.stepIndex === null ? undefined : steps[e.stepIndex];
+        if (step) {
+          step.state = e.status;
+          step.reason = e.reason;
+        } else {
+          unmatched.push({ name: e.name, status: e.status, reason: e.reason });
+        }
+        break;
+      }
+      case "prompt": {
+        const step = steps.at(-1);
+        if (step) step.needsInput = true;
+        status = e.prompt === "password" ? "Waiting for password…" : "Waiting for input…";
+        term.focus();
+        break;
+      }
+      case "exited":
+      case "error":
+        finishRunningStep();
+        clearInputRequests();
+        if (summarySeen) explainUnreported();
+        running = false;
+        status =
+          e.kind === "error"
+            ? `Error: ${e.message}`
+            : e.code === 0
+              ? "Finished"
+              : `Exited with code ${e.code}`;
+        degraded = receivedOutput && steps.length === 0;
+        break;
+    }
+  }
+
+  // topgrade omits a step from its summary when the step aborts during a dry
+  // run (it can't continue without real command output) or is skipped
+  // without `show_skipped`.
+  function explainUnreported() {
+    for (const step of steps) {
+      if (step.state === "done" && !step.reason) {
+        step.reason = runIsDry
+          ? "Not reported by topgrade (step can't complete in a dry run)"
+          : "Not reported in topgrade's summary";
+      }
+    }
+  }
+
+  function clearInputRequests() {
+    for (const step of steps) step.needsInput = false;
+  }
+
   async function run() {
     term.reset();
     fit.fit();
+    steps = [];
+    unmatched = [];
+    degraded = false;
+    receivedOutput = false;
+    summarySeen = false;
+    runIsDry = dryRun;
 
-    const onOutput = new Channel<ArrayBuffer>();
-    onOutput.onmessage = (data) => term.write(new Uint8Array(data));
-
-    const onEvent = new Channel<RunEvent>();
-    onEvent.onmessage = (e) => {
-      if (e.kind === "started") {
-        running = true;
-        status = "Running…";
-      } else if (e.kind === "exited") {
-        running = false;
-        status = e.code === 0 ? "Finished" : `Exited with code ${e.code}`;
+    // Bytes and events share one channel to keep their order; xterm parses
+    // writes asynchronously, so events are queued behind preceding output
+    // (markers must land on the line the step header was written to).
+    const onStream = new Channel<ArrayBuffer | StreamEvent>();
+    onStream.onmessage = (msg) => {
+      if (msg instanceof ArrayBuffer) {
+        receivedOutput = true;
+        term.write(new Uint8Array(msg));
       } else {
-        running = false;
-        status = `Error: ${e.message}`;
+        term.write("", () => handleEvent(msg));
       }
     };
 
@@ -54,8 +143,7 @@
         flags: flags(),
         cols: term.cols,
         rows: term.rows,
-        onOutput,
-        onEvent,
+        onStream,
       });
       term.focus();
     } catch (err) {
@@ -66,6 +154,11 @@
   async function stop() {
     status = "Stopping…";
     await invoke("stop_run").catch(() => {});
+  }
+
+  function jumpTo(step: Step) {
+    if (step.marker && step.marker.line >= 0) term.scrollToLine(step.marker.line);
+    term.focus();
   }
 
   onMount(() => {
@@ -83,7 +176,10 @@
     fit.fit();
 
     term.onData((data) => {
-      if (running) invoke("write_input", { data }).catch(() => {});
+      if (!running) return;
+      clearInputRequests();
+      if (status.startsWith("Waiting")) status = "Running…";
+      invoke("write_input", { data }).catch(() => {});
     });
     term.onResize(({ cols, rows }) => {
       invoke("resize_pty", { cols, rows }).catch(() => {});
@@ -91,7 +187,9 @@
 
     const observer = new ResizeObserver(() => fit.fit());
     observer.observe(termEl);
+    const clock = setInterval(() => (now = Date.now()), 1000);
     return () => {
+      clearInterval(clock);
       observer.disconnect();
       term.dispose();
     };
@@ -107,7 +205,15 @@
     <label><input type="checkbox" bind:checked={dryRun} disabled={running} /> --dry-run</label>
     <span class="status">{status}</span>
   </header>
-  <div class="terminal" bind:this={termEl}></div>
+  {#if degraded}
+    <div class="banner">
+      Couldn't detect topgrade steps in the output — parsing degraded, showing raw output only.
+    </div>
+  {/if}
+  <div class="body">
+    <Sidebar {steps} {unmatched} {now} onselect={jumpTo} />
+    <div class="terminal" bind:this={termEl}></div>
+  </div>
 </main>
 
 <style>
@@ -167,8 +273,22 @@
     color: #999;
   }
 
+  .banner {
+    padding: 6px 12px;
+    background: #4a3b12;
+    color: #f0d68a;
+    border-bottom: 1px solid #6b5520;
+  }
+
+  .body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
   .terminal {
     flex: 1;
+    min-width: 0;
     min-height: 0;
     padding: 6px;
   }

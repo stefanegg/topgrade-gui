@@ -1,6 +1,7 @@
+mod parser;
 mod runner;
 
-use runner::{RunEvent, Runner};
+use runner::Runner;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{Manager, State};
 
@@ -10,10 +11,9 @@ fn start_run(
     flags: Vec<String>,
     cols: u16,
     rows: u16,
-    on_output: Channel<InvokeResponseBody>,
-    on_event: Channel<RunEvent>,
+    on_stream: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
-    runner.start(flags, cols, rows, on_output, on_event)
+    runner.start(flags, cols, rows, on_stream)
 }
 
 #[tauri::command]

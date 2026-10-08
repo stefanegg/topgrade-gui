@@ -1,4 +1,6 @@
-//! Runs topgrade inside a PTY and streams its raw output to the frontend.
+//! Runs topgrade inside a PTY and streams its raw output to the frontend,
+//! interleaved with parser events on the same channel so their order relative
+//! to the output is preserved.
 
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
@@ -8,6 +10,8 @@ use std::time::Duration;
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
+
+use crate::parser::Parser;
 
 /// Flags the frontend may toggle; anything else is rejected.
 const ALLOWED_FLAGS: &[&str] = &["--cleanup", "-y", "--yes", "--dry-run", "-n"];
@@ -42,8 +46,7 @@ impl Runner {
         flags: Vec<String>,
         cols: u16,
         rows: u16,
-        output: Channel<InvokeResponseBody>,
-        events: Channel<RunEvent>,
+        stream: Channel<InvokeResponseBody>,
     ) -> Result<(), String> {
         if let Some(bad) = flags.iter().find(|f| !ALLOWED_FLAGS.contains(&f.as_str())) {
             return Err(format!("flag not allowed: {bad}"));
@@ -75,21 +78,32 @@ impl Runner {
             *next
         };
 
+        send_event(&stream, &RunEvent::Started);
+        let output = stream.clone();
         let reader_thread = thread::spawn(move || {
+            let mut parser = Parser::default();
             let mut buf = [0u8; 8192];
             loop {
-                match reader.read(&mut buf) {
+                let n = match reader.read(&mut buf) {
                     Ok(0) | Err(_) => break,
-                    Ok(n) => {
-                        if output.send(InvokeResponseBody::Raw(buf[..n].to_vec())).is_err() {
-                            break;
-                        }
+                    Ok(n) => n,
+                };
+                // Split the chunk at each event so the frontend sees the
+                // event exactly after the output that triggered it.
+                let mut sent = 0;
+                for (offset, event) in parser.feed(&buf[..n]) {
+                    if offset > sent {
+                        send_bytes(&output, &buf[sent..offset]);
+                        sent = offset;
                     }
+                    send_event(&output, &event);
+                }
+                if sent < n {
+                    send_bytes(&output, &buf[sent..n]);
                 }
             }
         });
 
-        let _ = events.send(RunEvent::Started);
         let active_ref = Arc::clone(&self.active);
         thread::spawn(move || {
             let status = child.wait();
@@ -104,7 +118,7 @@ impl Runner {
                 Ok(status) => RunEvent::Exited { code: Some(status.exit_code()) },
                 Err(e) => RunEvent::Error { message: e.to_string() },
             };
-            let _ = events.send(event);
+            send_event(&stream, &event);
         });
 
         *active = Some(ActiveRun { id, master: pair.master, writer, killer });
@@ -154,6 +168,16 @@ impl Runner {
         if let Some(run) = self.active.lock().unwrap().as_mut() {
             let _ = run.killer.kill();
         }
+    }
+}
+
+fn send_bytes(stream: &Channel<InvokeResponseBody>, bytes: &[u8]) {
+    let _ = stream.send(InvokeResponseBody::Raw(bytes.to_vec()));
+}
+
+fn send_event(stream: &Channel<InvokeResponseBody>, event: &impl Serialize) {
+    if let Ok(json) = serde_json::to_string(event) {
+        let _ = stream.send(InvokeResponseBody::Json(json));
     }
 }
 

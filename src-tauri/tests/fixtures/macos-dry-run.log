@@ -1,0 +1,95 @@
+]0;Topgrade - macOS system update[1m
+── 21:24:07 - macOS system update ──────────────────────────────────────────────[0m
+Dry running: softwareupdate --install --all
+]0;Topgrade - Microsoft Office[1m
+── 21:24:07 - Microsoft Office ─────────────────────────────────────────────────[0m
+Dry running: /Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app/Contents/MacOS/msupdate --install
+]0;Topgrade - Bun Packages[1m
+── 21:24:07 - Bun Packages ─────────────────────────────────────────────────────[0m
+No global packages installed
+]0;Topgrade - oh-my-zsh[1m
+── 21:24:07 - oh-my-zsh ────────────────────────────────────────────────────────[0m
+Dry running: zsh /Users/s/.oh-my-zsh/tools/upgrade.sh
+]0;Topgrade - rustup[1m
+── 21:24:08 - rustup ───────────────────────────────────────────────────────────[0m
+Dry running: /Users/s/.cargo/bin/rustup update
+]0;Topgrade - .NET[1m
+── 21:24:08 - .NET ─────────────────────────────────────────────────────────────[0m
+Dry running: /opt/homebrew/bin/dotnet tool update dotnet-ef --global
+]0;Topgrade - pi[1m
+── 21:24:08 - pi ───────────────────────────────────────────────────────────────[0m
+Dry running: /opt/homebrew/bin/pi update --self
+Dry running: /opt/homebrew/bin/pi update --extensions
+]0;Topgrade - Visual Studio Code extensions[1m
+── 21:24:08 - Visual Studio Code extensions ────────────────────────────────────[0m
+Dry running: /usr/local/bin/code --update-extensions
+]0;Topgrade - Node Package Manager[1m
+── 21:24:08 - Node Package Manager ─────────────────────────────────────────────[0m
+Dry running: /opt/homebrew/bin/npm update '--location=global'
+]0;Topgrade - Yarn Package Manager[1m
+── 21:24:09 - Yarn Package Manager ─────────────────────────────────────────────[0m
+Dry running: /opt/homebrew/bin/yarn global upgrade
+]0;Topgrade - Performant Node Package Manager[1m
+── 21:24:09 - Performant Node Package Manager ──────────────────────────────────[0m
+Dry running: /opt/homebrew/bin/pnpm update -g
+]0;Topgrade - Deno[1m
+── 21:24:09 - Deno ─────────────────────────────────────────────────────────────[0m
+Dry running: /Users/s/.deno/bin/deno upgrade
+]0;Topgrade - GitHub CLI Extensions[1m
+── 21:24:09 - GitHub CLI Extensions ────────────────────────────────────────────[0m
+Dry running: /opt/homebrew/bin/gh extension upgrade --all
+]0;Topgrade - Claude Code[1m
+── 21:24:09 - Claude Code ──────────────────────────────────────────────────────[0m
+Dry running: /Users/s/.local/bin/claude update
+]0;Topgrade - Claude Code Plugins[1m
+── 21:24:09 - Claude Code Plugins ──────────────────────────────────────────────[0m
+Dry running: /Users/s/.local/bin/claude plugin marketplace update
+Dry running: /Users/s/.local/bin/claude plugin marketplace list --json
+]0;Topgrade - Skills[1m
+── 21:24:09 - Skills ───────────────────────────────────────────────────────────[0m
+Dry running: /opt/homebrew/bin/npx skills update --global
+]0;Topgrade - uv[1m
+── 21:24:09 - uv ───────────────────────────────────────────────────────────────[0m
+Dry running: /opt/homebrew/bin/uv self update
+]0;Topgrade - Bun[1m
+── 21:24:09 - Bun ──────────────────────────────────────────────────────────────[0m
+Dry running: /Users/s/.bun/bin/bun upgrade
+]0;Topgrade - Android Studio plugins[1m
+── 21:24:09 - Android Studio plugins ───────────────────────────────────────────[0m
+Dry running: /opt/homebrew/bin/studio update
+]0;Topgrade - Yazi packages[1m
+── 21:24:09 - Yazi packages ────────────────────────────────────────────────────[0m
+Dry running: /opt/homebrew/bin/ya pkg upgrade
+]0;Topgrade - Antigravity CLI[1m
+── 21:24:09 - Antigravity CLI ──────────────────────────────────────────────────[0m
+Dry running: /Users/s/.local/bin/agy update
+]0;Topgrade - Brew[1m
+── 21:24:09 - Brew ─────────────────────────────────────────────────────────────[0m
+Dry running: /opt/homebrew/bin/brew update
+Dry running: /opt/homebrew/bin/brew upgrade --formula
+]0;Topgrade - Brew - Cask[1m
+── 21:24:09 - Brew - Cask ──────────────────────────────────────────────────────[0m
+Dry running: /opt/homebrew/bin/brew upgrade --cask
+]0;Topgrade - Summary[1m
+── 21:24:09 - Summary ──────────────────────────────────────────────────────────[0m
+System update: [32m[1mOK[0m
+Microsoft Office: [32m[1mOK[0m
+bun-packages: [32m[1mOK[0m
+oh-my-zsh: [32m[1mOK[0m
+rustup: [32m[1mOK[0m
+.NET: [32m[1mOK[0m
+pi: [32m[1mOK[0m
+Visual Studio Code extensions: [32m[1mOK[0m
+npm: [32m[1mOK[0m
+yarn: [32m[1mOK[0m
+pnpm: [32m[1mOK[0m
+deno: [32m[1mOK[0m
+GitHub CLI Extensions: [32m[1mOK[0m
+Claude Code: [32m[1mOK[0m
+Skills: [32m[1mOK[0m
+bun: [32m[1mOK[0m
+Android Studio Plugins: [32m[1mOK[0m
+Yazi packages: [32m[1mOK[0m
+Antigravity CLI: [32m[1mOK[0m
+Brew (ARM): [32m[1mOK[0m
+Brew Cask (ARM): [32m[1mOK[0m
