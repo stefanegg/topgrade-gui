@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "topgrade-gui",
+  "productName": "Topgrade GUI",
   "version": "0.1.0",
   "identifier": "dev.eggenschwiler.topgrade-gui",
   "build": {
@@ -12,9 +12,10 @@
   "app": {
     "windows": [
       {
-        "title": "Topgrade",
+        "title": "Topgrade GUI",
         "width": 1100,
-        "height": 750
+        "height": 750,
+        "visible": false
       }
     ],
     "security": {
@@ -31,5 +32,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  }
+  },
+  "mainBinaryName": "topgrade-gui"
 }

@@ -59,6 +59,7 @@ impl Runner {
         rows: u16,
         log_dir: &Path,
         stream: Channel<InvokeResponseBody>,
+        on_saved: impl FnOnce() + Send + 'static,
     ) -> Result<(), String> {
         if let Some(bad) = flags.iter().find(|f| !ALLOWED_FLAGS.contains(&f.as_str())) {
             return Err(format!("flag not allowed: {bad}"));
@@ -127,6 +128,7 @@ impl Runner {
                 let summary = recorder.finish(Some(status.exit_code()), topgrade_version());
                 let _ = history::save(&log_path, &summary);
                 history::prune(&log_dir, history::KEEP_RUNS);
+                on_saved();
             }
             {
                 let mut active = active_ref.lock().unwrap();

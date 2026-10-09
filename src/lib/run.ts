@@ -127,3 +127,11 @@ export function formatAgo(iso: string, now: number): string {
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
 }
+
+/** settings.rs `Settings`. */
+export interface Settings {
+  remindAfterDays: number;
+  autostart: boolean;
+  cleanup: boolean;
+  assumeYes: boolean;
+}

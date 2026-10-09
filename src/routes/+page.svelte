@@ -1,18 +1,21 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke, Channel } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import "@xterm/xterm/css/xterm.css";
   import Sidebar from "$lib/Sidebar.svelte";
   import HistoryList from "$lib/HistoryList.svelte";
+  import SettingsPanel from "$lib/SettingsPanel.svelte";
   import {
     formatAgo,
     formatDate,
     isDryRun,
     runTotals,
     type RunSummary,
+    type Settings,
     type Step,
     type StreamEvent,
     type UnmatchedResult,
@@ -43,6 +46,32 @@
   /** Saved run being replayed read-only; `null` for live runs. */
   let viewing = $state<RunSummary | null>(null);
   let lastRun = $derived(history.find((r) => !isDryRun(r)));
+
+  let settings = $state<Settings | null>(null);
+  let showSettings = $state(false);
+
+  async function loadSettings() {
+    settings = await invoke<Settings>("get_settings").catch(() => null);
+    if (settings) {
+      cleanup = settings.cleanup;
+      assumeYes = settings.assumeYes;
+    }
+  }
+
+  function updateSettings(patch: Partial<Settings>) {
+    if (!settings) return;
+    settings = { ...settings, ...patch };
+    invoke("set_settings", { settings }).catch((err) => (status = `Couldn't save settings: ${err}`));
+  }
+
+  /** Tray "Run now": start with the saved flags unless a run is active. */
+  function runFromTray() {
+    if (running) return;
+    showHistory = false;
+    showSettings = false;
+    dryRun = false;
+    run();
+  }
 
   async function loadHistory() {
     history = await invoke<RunSummary[]>("list_runs").catch(() => []);
@@ -268,7 +297,10 @@
     observer.observe(termEl);
     const clock = setInterval(() => (now = Date.now()), 1000);
     loadHistory();
+    loadSettings();
+    const unlisten = listen("run-requested", runFromTray);
     return () => {
+      unlisten.then((stop) => stop());
       clearInterval(clock);
       observer.disconnect();
       term.dispose();
@@ -280,8 +312,22 @@
   <header>
     <button class="primary" onclick={run} disabled={running}>Run</button>
     <button onclick={stop} disabled={!running || viewing !== null}>Stop</button>
-    <label><input type="checkbox" bind:checked={cleanup} disabled={running} /> --cleanup</label>
-    <label><input type="checkbox" bind:checked={assumeYes} disabled={running} /> -y</label>
+    <label>
+      <input
+        type="checkbox"
+        bind:checked={cleanup}
+        disabled={running}
+        onchange={(e) => updateSettings({ cleanup: e.currentTarget.checked })}
+      /> --cleanup
+    </label>
+    <label>
+      <input
+        type="checkbox"
+        bind:checked={assumeYes}
+        disabled={running}
+        onchange={(e) => updateSettings({ assumeYes: e.currentTarget.checked })}
+      /> -y
+    </label>
     <label><input type="checkbox" bind:checked={dryRun} disabled={running} /> --dry-run</label>
     {#if import.meta.env.DEV}
       <select
@@ -298,8 +344,25 @@
         <option>macos-dry-run.log</option>
       </select>
     {/if}
-    <button onclick={() => (showHistory = !showHistory)} disabled={running} class:active={showHistory}>
+    <button
+      onclick={() => {
+        showHistory = !showHistory;
+        showSettings = false;
+      }}
+      disabled={running}
+      class:active={showHistory}
+    >
       History
+    </button>
+    <button
+      onclick={() => {
+        showSettings = !showSettings;
+        showHistory = false;
+      }}
+      class:active={showSettings}
+      disabled={!settings}
+    >
+      Settings
     </button>
     <span class="status">
       {#if status === "Idle" && lastRun}
@@ -342,6 +405,9 @@
   <div class="body">
     {#if showHistory}
       <HistoryList runs={history} {now} onopen={openRun} onclose={() => (showHistory = false)} />
+    {/if}
+    {#if showSettings && settings}
+      <SettingsPanel {settings} onchange={updateSettings} onclose={() => (showSettings = false)} />
     {/if}
     <Sidebar {steps} {unmatched} {now} onselect={jumpTo} />
     <div class="terminal" bind:this={termEl}></div>
