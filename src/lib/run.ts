@@ -17,7 +17,19 @@ export type StreamEvent =
       status: StepStatus;
       reason: string | null;
     }
-  | { kind: "prompt"; prompt: PromptKind };
+  | { kind: "prompt"; prompt: PromptKind }
+  | {
+      kind: "stepUpdates";
+      index: number;
+      items: UpdateItem[];
+      unlistedCount: number | null;
+    };
+
+export interface UpdateItem {
+  name: string;
+  from: string | null;
+  to: string | null;
+}
 
 export interface Step {
   name: string;
@@ -30,6 +42,26 @@ export interface Step {
   endedAt: number | null;
   needsInput: boolean;
   marker: IMarker | null;
+  updates: UpdateItem[];
+  /** Count from tools that don't list names (npm, incl. dependencies). */
+  unlistedCount: number | null;
+}
+
+export interface RunTotals {
+  updated: number;
+  stepsWithUpdates: number;
+  failed: number;
+}
+
+/** Totals count listed items only; unlisted counts (npm's "changed 1122
+ *  packages", mostly dependencies) would drown them out. */
+export function runTotals(steps: Step[]): RunTotals {
+  const withUpdates = steps.filter((s) => s.updates.length > 0);
+  return {
+    updated: withUpdates.reduce((n, s) => n + s.updates.length, 0),
+    stepsWithUpdates: withUpdates.length,
+    failed: steps.filter((s) => s.state === "failed").length,
+  };
 }
 
 export interface UnmatchedResult {

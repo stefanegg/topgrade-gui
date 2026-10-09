@@ -1,3 +1,4 @@
+mod extractors;
 mod parser;
 mod runner;
 
@@ -37,6 +38,19 @@ fn stop_run(runner: State<Runner>) -> Result<(), String> {
     runner.stop()
 }
 
+/// Dev builds only: replays a log from `tests/fixtures` (UI testing without
+/// waiting for real updates).
+#[tauri::command]
+fn replay_fixture(name: String, on_stream: Channel<InvokeResponseBody>) -> Result<(), String> {
+    if !cfg!(debug_assertions) || name.contains(['/', '\\']) {
+        return Err("not available".into());
+    }
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name);
+    runner::replay(&path, on_stream)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -46,7 +60,8 @@ pub fn run() {
             start_run,
             write_input,
             resize_pty,
-            stop_run
+            stop_run,
+            replay_fixture
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

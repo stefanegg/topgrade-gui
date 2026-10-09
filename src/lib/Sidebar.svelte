@@ -10,6 +10,14 @@
 
   let { steps, unmatched, now, onselect }: Props = $props();
 
+  let expanded = $state(new Set<Step>());
+
+  function toggle(step: Step) {
+    const next = new Set(expanded);
+    if (!next.delete(step)) next.add(step);
+    expanded = next;
+  }
+
   const icons: Record<Step["state"], string> = {
     running: "",
     done: "•",
@@ -26,7 +34,7 @@
   {/if}
   <ul>
     {#each steps as step}
-      <li>
+      <li class="row">
         <button
           class="step {step.state}"
           class:needs-input={step.needsInput}
@@ -38,16 +46,54 @@
             {#if step.state === "running"}<span class="spinner"></span>{:else}{icons[step.state]}{/if}
           </span>
           <span class="name">{step.name}</span>
+        </button>
+        <!-- Fixed-width columns keep counts and times aligned across rows. -->
+        <span class="count-slot">
+          {#if step.updates.length > 0}
+            <button
+              class="count"
+              class:open={expanded.has(step)}
+              title="Show updated items"
+              onclick={() => toggle(step)}
+            >
+              {step.updates.length}
+            </button>
+          {:else if step.unlistedCount !== null}
+            <span
+              class="count unlisted"
+              title="{step.unlistedCount} packages changed, including dependencies (no names reported)"
+            >
+              ~{step.unlistedCount}
+            </span>
+          {/if}
+        </span>
+        <span class="time">
           {#if step.needsInput}
             <span class="badge">input</span>
           {:else}
-            <span class="time">{formatDuration((step.endedAt ?? now) - step.startedAt)}</span>
+            {formatDuration((step.endedAt ?? now) - step.startedAt)}
           {/if}
-        </button>
-        {#if step.reason}
-          <div class="reason">{step.reason}</div>
-        {/if}
+        </span>
       </li>
+      {#if step.reason}
+        <li class="reason">{step.reason}</li>
+      {/if}
+      {#if expanded.has(step)}
+        <li>
+          <ul class="updates" class:nested={step.group !== null}>
+            {#each step.updates as item}
+              <li>
+                <span class="item-name">{item.name}</span>
+                {#if item.from || item.to}
+                  <span class="versions">
+                    {#if item.from}{item.from} → {/if}{item.to ?? ""}
+                  </span>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        </li>
+      {/if}
     {/each}
   </ul>
   {#if unmatched.length > 0}
@@ -65,7 +111,7 @@
 
 <style>
   aside {
-    width: 260px;
+    width: 300px;
     flex-shrink: 0;
     overflow-y: auto;
     background: #252525;
@@ -151,6 +197,9 @@
   }
 
   .time {
+    flex-shrink: 0;
+    width: 48px;
+    text-align: right;
     color: #888;
     font-variant-numeric: tabular-nums;
   }
@@ -161,6 +210,82 @@
     border-radius: 8px;
     background: #e5b93b;
     color: #1e1e1e;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    padding-right: 8px;
+  }
+
+  .row .step {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  .count-slot {
+    flex-shrink: 0;
+    width: 48px;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .count {
+    min-width: 22px;
+    padding: 0 6px;
+    border: none;
+    border-radius: 9px;
+    background: #2e4d2f;
+    color: #9fdca1;
+    font: inherit;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .count.open {
+    background: #4caf50;
+    color: #1e1e1e;
+  }
+
+  .count.unlisted {
+    background: #333;
+    color: #999;
+    cursor: help;
+  }
+
+  .updates {
+    margin: 0 8px 6px 37px;
+    padding: 4px 8px;
+    background: #1e1e1e;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  .updates.nested {
+    margin-left: 55px;
+  }
+
+  .updates li {
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+    padding: 1px 0;
+  }
+
+  .item-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .versions {
+    color: #888;
+    font-family: Menlo, monospace;
+    font-size: 11px;
+    white-space: nowrap;
   }
 
   .reason {

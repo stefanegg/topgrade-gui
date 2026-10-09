@@ -6,7 +6,7 @@
   import { FitAddon } from "@xterm/addon-fit";
   import "@xterm/xterm/css/xterm.css";
   import Sidebar from "$lib/Sidebar.svelte";
-  import type { Step, StreamEvent, UnmatchedResult } from "$lib/run";
+  import { runTotals, type Step, type StreamEvent, type UnmatchedResult } from "$lib/run";
 
   let termEl: HTMLDivElement;
   let term: Terminal;
@@ -22,6 +22,7 @@
   let unmatched = $state<UnmatchedResult[]>([]);
   let degraded = $state(false);
   let now = $state(Date.now());
+  let totals = $derived(runTotals(steps));
   let logPath = $state<string | null>(null);
   let receivedOutput = false;
   let summarySeen = false;
@@ -64,6 +65,8 @@
           endedAt: null,
           needsInput: false,
           marker: term.registerMarker(0) ?? null,
+          updates: [],
+          unlistedCount: null,
         });
         break;
       }
@@ -78,6 +81,14 @@
           step.reason = e.reason;
         } else {
           unmatched.push({ name: e.name, status: e.status, reason: e.reason });
+        }
+        break;
+      }
+      case "stepUpdates": {
+        const step = steps[e.index];
+        if (step) {
+          step.updates = e.items;
+          step.unlistedCount = e.unlistedCount;
         }
         break;
       }
@@ -123,6 +134,14 @@
   }
 
   async function run() {
+    await start("start_run", { flags: flags(), cols: term.cols, rows: term.rows });
+  }
+
+  async function replay(name: string) {
+    await start("replay_fixture", { name });
+  }
+
+  async function start(command: string, args: Record<string, unknown>) {
     term.reset();
     fit.fit();
     steps = [];
@@ -147,12 +166,7 @@
     };
 
     try {
-      await invoke("start_run", {
-        flags: flags(),
-        cols: term.cols,
-        rows: term.rows,
-        onStream,
-      });
+      await invoke(command, { ...args, onStream });
       term.focus();
     } catch (err) {
       status = `Failed to start: ${err}`;
@@ -211,11 +225,41 @@
     <label><input type="checkbox" bind:checked={cleanup} disabled={running} /> --cleanup</label>
     <label><input type="checkbox" bind:checked={assumeYes} disabled={running} /> -y</label>
     <label><input type="checkbox" bind:checked={dryRun} disabled={running} /> --dry-run</label>
+    {#if import.meta.env.DEV}
+      <select
+        disabled={running}
+        onchange={(e) => {
+          const select = e.currentTarget;
+          if (select.value) replay(select.value);
+          select.value = "";
+        }}
+      >
+        <option value="">Replay fixture…</option>
+        <option>macos-run.log</option>
+        <option>fedora-run.log</option>
+        <option>macos-dry-run.log</option>
+      </select>
+    {/if}
     <span class="status">{status}</span>
     {#if logPath}
       <button onclick={() => revealItemInDir(logPath!)} title={logPath}>Show log</button>
     {/if}
   </header>
+  {#if steps.length > 0}
+    <div class="totals" class:has-failed={totals.failed > 0}>
+      {#if totals.updated > 0}
+        <strong>{totals.updated}</strong> updated across {totals.stepsWithUpdates}
+        {totals.stepsWithUpdates === 1 ? "step" : "steps"}
+      {:else if running}
+        Nothing updated yet
+      {:else}
+        Nothing updated
+      {/if}
+      {#if totals.failed > 0}
+        · <span class="failed">{totals.failed} failed</span>
+      {/if}
+    </div>
+  {/if}
   {#if degraded}
     <div class="banner">
       Couldn't detect topgrade steps in the output — parsing degraded, showing raw output only.
@@ -282,6 +326,26 @@
   .status {
     margin-left: auto;
     color: #999;
+  }
+
+  .totals {
+    padding: 6px 12px;
+    background: #232a23;
+    border-bottom: 1px solid #3a3a3a;
+    color: #bbb;
+  }
+
+  .totals strong {
+    color: #4caf50;
+  }
+
+  .totals.has-failed {
+    background: #2e2222;
+  }
+
+  .totals .failed {
+    color: #e5534b;
+    font-weight: bold;
   }
 
   .banner {

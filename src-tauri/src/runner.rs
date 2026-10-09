@@ -96,7 +96,7 @@ impl Runner {
 
         // Logging is best-effort: a run must not fail because of it.
         let log_path = log_file_path(log_dir, &flags);
-        let mut log = fs::create_dir_all(log_dir)
+        let log = fs::create_dir_all(log_dir)
             .and_then(|_| File::create(&log_path))
             .ok();
         send_event(
@@ -107,37 +107,7 @@ impl Runner {
         );
 
         let output = stream.clone();
-        let reader_thread = thread::spawn(move || {
-            let mut parser = Parser::default();
-            let mut buf = [0u8; 8192];
-            loop {
-                let n = match reader.read(&mut buf) {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => n,
-                };
-                if let Some(file) = log.as_mut() {
-                    if file.write_all(&buf[..n]).is_err() {
-                        log = None;
-                    }
-                }
-                // Split the chunk at each event so the frontend sees the
-                // event exactly after the output that triggered it.
-                let mut sent = 0;
-                for (offset, event) in parser.feed(&buf[..n]) {
-                    if offset > sent {
-                        send_bytes(&output, &buf[sent..offset]);
-                        sent = offset;
-                    }
-                    send_event(&output, &event);
-                }
-                if sent < n {
-                    send_bytes(&output, &buf[sent..n]);
-                }
-            }
-            for event in parser.finish() {
-                send_event(&output, &event);
-            }
-        });
+        let reader_thread = thread::spawn(move || pump(&mut reader, &output, log, None));
 
         let active_ref = Arc::clone(&self.active);
         thread::spawn(move || {
@@ -220,6 +190,60 @@ impl Runner {
             let _ = run.killer.kill();
         }
     }
+}
+
+/// Streams output from `reader` to the frontend until EOF: raw bytes
+/// (also written to `log`) interleaved with parser events, split at each
+/// event so the frontend sees it exactly after the output that triggered it.
+/// `pace` delays each chunk (replays).
+fn pump(
+    reader: &mut dyn Read,
+    stream: &Channel<InvokeResponseBody>,
+    mut log: Option<File>,
+    pace: Option<Duration>,
+) {
+    let mut parser = Parser::default();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = match reader.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        if let Some(file) = log.as_mut() {
+            if file.write_all(&buf[..n]).is_err() {
+                log = None;
+            }
+        }
+        let mut sent = 0;
+        for (offset, event) in parser.feed(&buf[..n]) {
+            if offset > sent {
+                send_bytes(stream, &buf[sent..offset]);
+                sent = offset;
+            }
+            send_event(stream, &event);
+        }
+        if sent < n {
+            send_bytes(stream, &buf[sent..n]);
+        }
+        if let Some(pace) = pace {
+            thread::sleep(pace);
+        }
+    }
+    for event in parser.finish() {
+        send_event(stream, &event);
+    }
+}
+
+/// Plays a saved log through the parser as if it were a live run.
+pub fn replay(path: &Path, stream: Channel<InvokeResponseBody>) -> Result<(), String> {
+    let mut file = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let log_path = Some(path.display().to_string());
+    thread::spawn(move || {
+        send_event(&stream, &RunEvent::Started { log_path });
+        pump(&mut file, &stream, None, Some(Duration::from_millis(15)));
+        send_event(&stream, &RunEvent::Exited { code: Some(0) });
+    });
+    Ok(())
 }
 
 /// `<dir>/2026-10-08T21-30-00-macos[-dry-run].log`: raw PTY bytes, usable as

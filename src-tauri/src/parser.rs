@@ -10,10 +10,14 @@
 
 use serde::Serialize;
 
+use crate::extractors::{self, Extracted};
+
 const TITLE_MARKER: &str = "Topgrade - ";
 const SUMMARY: &str = "Summary";
 /// Title topgrade sets while showing the retry prompt; not a step.
 const AWAITING_USER: &str = "Awaiting user";
+/// Cap on lines kept per step for extractors.
+const MAX_STEP_LINES: usize = 50_000;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -36,6 +40,12 @@ pub enum ParseEvent {
     },
     Prompt {
         prompt: PromptKind,
+    },
+    /// Emitted when a step's output ends, if its extractor found anything.
+    StepUpdates {
+        index: usize,
+        #[serde(flatten)]
+        updates: Extracted,
     },
 }
 
@@ -93,6 +103,8 @@ struct State {
     /// Summary lines are in step order; only search steps from here on.
     summary_cursor: usize,
     last_match: Option<LastMatch>,
+    /// Output lines of the step currently printing (the last started one).
+    step_output: Option<Vec<String>>,
     events: Vec<ParseEvent>,
 }
 
@@ -125,6 +137,7 @@ impl Parser {
 
     /// Call at end of output: flushes results still pending on lookahead.
     pub fn finish(&mut self) -> Vec<ParseEvent> {
+        self.state.end_step_output();
         self.state.end_summary();
         std::mem::take(&mut self.state.events)
     }
@@ -132,6 +145,7 @@ impl Parser {
 
 impl State {
     fn start_step(&mut self, group: Option<String>, name: String) {
+        self.end_step_output();
         self.end_summary();
         if name == SUMMARY {
             self.summary = Some(group.clone());
@@ -144,11 +158,22 @@ impl State {
             name: name.clone(),
             matched: false,
         });
+        self.step_output = Some(Vec::new());
         self.events.push(ParseEvent::StepStarted {
             index: self.steps.len() - 1,
             name,
             group,
         });
+    }
+
+    fn end_step_output(&mut self) {
+        let Some(lines) = self.step_output.take() else {
+            return;
+        };
+        let index = self.steps.len() - 1;
+        if let Some(updates) = extractors::extract(&self.steps[index].name, &lines) {
+            self.events.push(ParseEvent::StepUpdates { index, updates });
+        }
     }
 
     fn end_summary(&mut self) {
@@ -171,10 +196,10 @@ impl State {
     }
 
     fn on_line(&mut self) {
-        let line = std::mem::take(&mut self.line);
+        let raw = std::mem::take(&mut self.line);
         self.prompt_reported = false;
         self.pending_cr = false;
-        let line = line.trim();
+        let line = raw.trim();
 
         if let Some((group, name)) = parse_separator(line) {
             let header = (group, name.to_string());
@@ -183,6 +208,11 @@ impl State {
                 self.start_step(header.0, header.1);
             }
             return;
+        }
+        if let Some(output) = self.step_output.as_mut() {
+            if output.len() < MAX_STEP_LINES {
+                output.push(raw.trim_end().to_string());
+            }
         }
         if self.summary.is_some() {
             if let Some((name, status, reason)) = parse_result(line) {
@@ -299,6 +329,28 @@ impl vte::Perform for State {
             b'\n' => self.on_line(),
             b'\r' => self.pending_cr = true,
             _ => {}
+        }
+    }
+
+    fn csi_dispatch(
+        &mut self,
+        params: &vte::Params,
+        intermediates: &[u8],
+        _ignore: bool,
+        action: char,
+    ) {
+        // Some tools move the cursor right instead of printing spaces
+        // (`Updating\x1b[1Cmarketplaces`); keep the words apart.
+        if action == 'C' && intermediates.is_empty() {
+            let n = params
+                .iter()
+                .next()
+                .and_then(|p| p.first().copied())
+                .unwrap_or(1)
+                .max(1);
+            for _ in 0..n.min(512) {
+                self.print(' ');
+            }
         }
     }
 
@@ -761,6 +813,14 @@ mod tests {
                 String::from_utf8_lossy(input)
             );
         }
+    }
+
+    #[test]
+    fn cursor_forward_becomes_spaces() {
+        let mut state = State::default();
+        let mut vte = vte::Parser::new();
+        vte.advance(&mut state, b"Updating\x1b[Cmarketplaces\x1b[2Cdone");
+        assert_eq!(state.line, "Updating marketplaces  done");
     }
 
     #[test]
