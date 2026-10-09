@@ -13,6 +13,7 @@ use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, Pt
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
 
+use crate::history::{self, Recorder};
 use crate::parser::Parser;
 
 /// Flags the frontend may toggle; anything else is rejected.
@@ -106,13 +107,27 @@ impl Runner {
             },
         );
 
+        // Only runs with a log get a history entry (the summary sits next to it).
+        let mut recorder = log.as_ref().map(|_| {
+            let id = log_path.file_stem().unwrap_or_default().to_string_lossy();
+            Recorder::new(id.into_owned(), flags.clone())
+        });
         let output = stream.clone();
-        let reader_thread = thread::spawn(move || pump(&mut reader, &output, log, None));
+        let reader_thread = thread::spawn(move || {
+            pump(&mut reader, &output, log, recorder.as_mut(), None);
+            recorder
+        });
 
         let active_ref = Arc::clone(&self.active);
+        let log_dir = log_dir.to_path_buf();
         thread::spawn(move || {
             let status = child.wait();
-            let _ = reader_thread.join();
+            let recorder = reader_thread.join().ok().flatten();
+            if let (Some(recorder), Ok(status)) = (recorder, &status) {
+                let summary = recorder.finish(Some(status.exit_code()), topgrade_version());
+                let _ = history::save(&log_path, &summary);
+                history::prune(&log_dir, history::KEEP_RUNS);
+            }
             {
                 let mut active = active_ref.lock().unwrap();
                 if active.as_ref().is_some_and(|run| run.id == id) {
@@ -200,6 +215,7 @@ fn pump(
     reader: &mut dyn Read,
     stream: &Channel<InvokeResponseBody>,
     mut log: Option<File>,
+    mut recorder: Option<&mut Recorder>,
     pace: Option<Duration>,
 ) {
     let mut parser = Parser::default();
@@ -220,6 +236,9 @@ fn pump(
                 send_bytes(stream, &buf[sent..offset]);
                 sent = offset;
             }
+            if let Some(recorder) = recorder.as_deref_mut() {
+                recorder.on_event(&event);
+            }
             send_event(stream, &event);
         }
         if sent < n {
@@ -230,20 +249,40 @@ fn pump(
         }
     }
     for event in parser.finish() {
+        if let Some(recorder) = recorder.as_deref_mut() {
+            recorder.on_event(&event);
+        }
         send_event(stream, &event);
     }
 }
 
-/// Plays a saved log through the parser as if it were a live run.
-pub fn replay(path: &Path, stream: Channel<InvokeResponseBody>) -> Result<(), String> {
+/// Plays a saved log through the parser as if it were a live run; `pace`
+/// delays each chunk to imitate live output.
+pub fn replay(
+    path: &Path,
+    stream: Channel<InvokeResponseBody>,
+    pace: Option<Duration>,
+) -> Result<(), String> {
     let mut file = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let log_path = Some(path.display().to_string());
     thread::spawn(move || {
         send_event(&stream, &RunEvent::Started { log_path });
-        pump(&mut file, &stream, None, Some(Duration::from_millis(15)));
+        pump(&mut file, &stream, None, None, pace);
         send_event(&stream, &RunEvent::Exited { code: Some(0) });
     });
     Ok(())
+}
+
+/// `topgrade 17.12.3` → `17.12.3`, via the login shell like the run itself.
+fn topgrade_version() -> Option<String> {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
+    let output = std::process::Command::new(shell)
+        .args(["-l", "-c", "topgrade --version"])
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    let version = text.lines().find_map(|l| l.strip_prefix("topgrade "))?;
+    Some(version.trim().to_string())
 }
 
 /// `<dir>/2026-10-08T21-30-00-macos[-dry-run].log`: raw PTY bytes, usable as

@@ -10,9 +10,9 @@ mod tools;
 
 use std::collections::HashSet;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Update {
     pub name: String,
     pub from: Option<String>,
@@ -30,7 +30,7 @@ impl Update {
 }
 
 /// What a step updated.
-#[derive(Debug, Clone, PartialEq, Default, Serialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Extracted {
     pub items: Vec<Update>,

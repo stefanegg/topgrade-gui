@@ -8,7 +8,7 @@
 //! `TOPGRADE_PREFIX` as `(<prefix>) `; such steps get a `group` and have their
 //! own summary.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::extractors::{self, Extracted};
 
@@ -49,7 +49,7 @@ pub enum ParseEvent {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum StepStatus {
     Ok,

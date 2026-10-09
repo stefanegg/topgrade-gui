@@ -1,10 +1,20 @@
 mod extractors;
+mod history;
 mod parser;
 mod runner;
 
+use std::path::PathBuf;
+use std::time::Duration;
+
+use history::RunSummary;
 use runner::Runner;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Manager, State};
+
+fn log_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(dir.join("logs"))
+}
 
 #[tauri::command]
 fn start_run(
@@ -15,12 +25,23 @@ fn start_run(
     rows: u16,
     on_stream: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
-    let log_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("logs");
-    runner.start(flags, cols, rows, &log_dir, on_stream)
+    runner.start(flags, cols, rows, &log_dir(&app)?, on_stream)
+}
+
+/// Saved runs, newest first.
+#[tauri::command]
+fn list_runs(app: AppHandle) -> Result<Vec<RunSummary>, String> {
+    Ok(history::list(&log_dir(&app)?))
+}
+
+#[tauri::command]
+fn replay_run(
+    app: AppHandle,
+    id: String,
+    on_stream: Channel<InvokeResponseBody>,
+) -> Result<(), String> {
+    let path = history::log_path(&log_dir(&app)?, &id).ok_or("run not found")?;
+    runner::replay(&path, on_stream, None)
 }
 
 #[tauri::command]
@@ -48,7 +69,7 @@ fn replay_fixture(name: String, on_stream: Channel<InvokeResponseBody>) -> Resul
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
         .join(name);
-    runner::replay(&path, on_stream)
+    runner::replay(&path, on_stream, Some(Duration::from_millis(15)))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -61,6 +82,8 @@ pub fn run() {
             write_input,
             resize_pty,
             stop_run,
+            list_runs,
+            replay_run,
             replay_fixture
         ])
         .build(tauri::generate_context!())

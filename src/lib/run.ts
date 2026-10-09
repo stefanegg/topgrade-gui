@@ -75,3 +75,55 @@ export function formatDuration(ms: number): string {
   if (s < 60) return `${s}s`;
   return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 }
+
+/** Saved run (history.rs `RunSummary`). */
+export interface RunSummary {
+  id: string;
+  startedAt: string;
+  durationSecs: number;
+  exitCode: number | null;
+  flags: string[];
+  os: string;
+  topgradeVersion: string | null;
+  steps: {
+    name: string;
+    group: string | null;
+    status: StepStatus | null;
+    reason: string | null;
+    durationSecs: number;
+    updates: { items: UpdateItem[]; unlistedCount: number | null } | null;
+  }[];
+  unmatched: UnmatchedResult[];
+}
+
+export function summaryTotals(run: RunSummary): RunTotals {
+  const withUpdates = run.steps.filter((s) => (s.updates?.items.length ?? 0) > 0);
+  return {
+    updated: withUpdates.reduce((n, s) => n + (s.updates?.items.length ?? 0), 0),
+    stepsWithUpdates: withUpdates.length,
+    failed: run.steps.filter((s) => s.status === "failed").length,
+  };
+}
+
+export function isDryRun(run: RunSummary): boolean {
+  return run.flags.includes("--dry-run") || run.flags.includes("-n");
+}
+
+export function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function formatAgo(iso: string, now: number): string {
+  const minutes = Math.floor((now - new Date(iso).getTime()) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}

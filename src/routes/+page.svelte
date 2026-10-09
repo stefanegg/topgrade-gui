@@ -6,7 +6,17 @@
   import { FitAddon } from "@xterm/addon-fit";
   import "@xterm/xterm/css/xterm.css";
   import Sidebar from "$lib/Sidebar.svelte";
-  import { runTotals, type Step, type StreamEvent, type UnmatchedResult } from "$lib/run";
+  import HistoryList from "$lib/HistoryList.svelte";
+  import {
+    formatAgo,
+    formatDate,
+    isDryRun,
+    runTotals,
+    type RunSummary,
+    type Step,
+    type StreamEvent,
+    type UnmatchedResult,
+  } from "$lib/run";
 
   let termEl: HTMLDivElement;
   let term: Terminal;
@@ -27,6 +37,16 @@
   let receivedOutput = false;
   let summarySeen = false;
   let runIsDry = false;
+
+  let history = $state<RunSummary[]>([]);
+  let showHistory = $state(false);
+  /** Saved run being replayed read-only; `null` for live runs. */
+  let viewing = $state<RunSummary | null>(null);
+  let lastRun = $derived(history.find((r) => !isDryRun(r)));
+
+  async function loadHistory() {
+    history = await invoke<RunSummary[]>("list_runs").catch(() => []);
+  }
 
   function flags(): string[] {
     const f: string[] = [];
@@ -52,7 +72,7 @@
       case "started":
         logPath = e.logPath;
         running = true;
-        status = "Running…";
+        status = viewing ? "Loading…" : "Running…";
         break;
       case "stepStarted": {
         finishRunningSteps(e.group);
@@ -105,13 +125,19 @@
         clearInputRequests();
         if (summarySeen) explainUnreported();
         running = false;
+        degraded = receivedOutput && steps.length === 0;
+        if (viewing) {
+          applySavedDurations(viewing);
+          status = "";
+          break;
+        }
         status =
           e.kind === "error"
             ? `Error: ${e.message}`
             : e.code === 0
               ? "Finished"
               : `Exited with code ${e.code}`;
-        degraded = receivedOutput && steps.length === 0;
+        loadHistory();
         break;
     }
   }
@@ -129,16 +155,48 @@
     }
   }
 
+  /** Replays render instantly, so step times come from the saved summary. */
+  function applySavedDurations(run: RunSummary) {
+    steps.forEach((step, i) => {
+      const saved = run.steps[i];
+      // Logs saved before history existed have no timings.
+      if (saved?.name !== step.name || saved.durationSecs === 0) return;
+      step.startedAt = 0;
+      step.endedAt = saved.durationSecs * 1000;
+    });
+  }
+
   function clearInputRequests() {
     for (const step of steps) step.needsInput = false;
   }
 
   async function run() {
+    viewing = null;
+    runIsDry = dryRun;
     await start("start_run", { flags: flags(), cols: term.cols, rows: term.rows });
   }
 
   async function replay(name: string) {
+    viewing = null;
+    runIsDry = name.includes("dry-run");
     await start("replay_fixture", { name });
+  }
+
+  async function openRun(saved: RunSummary) {
+    showHistory = false;
+    viewing = saved;
+    runIsDry = isDryRun(saved);
+    await start("replay_run", { id: saved.id });
+  }
+
+  function closeRun() {
+    viewing = null;
+    term.reset();
+    steps = [];
+    unmatched = [];
+    degraded = false;
+    logPath = null;
+    status = "Idle";
   }
 
   async function start(command: string, args: Record<string, unknown>) {
@@ -150,7 +208,6 @@
     logPath = null;
     receivedOutput = false;
     summarySeen = false;
-    runIsDry = dryRun;
 
     // Bytes and events share one channel to keep their order; xterm parses
     // writes asynchronously, so events are queued behind preceding output
@@ -198,7 +255,7 @@
     fit.fit();
 
     term.onData((data) => {
-      if (!running) return;
+      if (!running || viewing) return;
       clearInputRequests();
       if (status.startsWith("Waiting")) status = "Running…";
       invoke("write_input", { data }).catch(() => {});
@@ -210,6 +267,7 @@
     const observer = new ResizeObserver(() => fit.fit());
     observer.observe(termEl);
     const clock = setInterval(() => (now = Date.now()), 1000);
+    loadHistory();
     return () => {
       clearInterval(clock);
       observer.disconnect();
@@ -221,7 +279,7 @@
 <main>
   <header>
     <button class="primary" onclick={run} disabled={running}>Run</button>
-    <button onclick={stop} disabled={!running}>Stop</button>
+    <button onclick={stop} disabled={!running || viewing !== null}>Stop</button>
     <label><input type="checkbox" bind:checked={cleanup} disabled={running} /> --cleanup</label>
     <label><input type="checkbox" bind:checked={assumeYes} disabled={running} /> -y</label>
     <label><input type="checkbox" bind:checked={dryRun} disabled={running} /> --dry-run</label>
@@ -240,11 +298,27 @@
         <option>macos-dry-run.log</option>
       </select>
     {/if}
-    <span class="status">{status}</span>
+    <button onclick={() => (showHistory = !showHistory)} disabled={running} class:active={showHistory}>
+      History
+    </button>
+    <span class="status">
+      {#if status === "Idle" && lastRun}
+        Last run: {formatAgo(lastRun.startedAt, now)}
+      {:else}
+        {status}
+      {/if}
+    </span>
     {#if logPath}
       <button onclick={() => revealItemInDir(logPath!)} title={logPath}>Show log</button>
     {/if}
   </header>
+  {#if viewing}
+    <div class="viewing">
+      Viewing run from {formatDate(viewing.startedAt)}
+      {#if isDryRun(viewing)}(dry run){/if} · read-only
+      <button onclick={closeRun}>Close</button>
+    </div>
+  {/if}
   {#if steps.length > 0}
     <div class="totals" class:has-failed={totals.failed > 0}>
       {#if totals.updated > 0}
@@ -266,6 +340,9 @@
     </div>
   {/if}
   <div class="body">
+    {#if showHistory}
+      <HistoryList runs={history} {now} onopen={openRun} onclose={() => (showHistory = false)} />
+    {/if}
     <Sidebar {steps} {unmatched} {now} onselect={jumpTo} />
     <div class="terminal" bind:this={termEl}></div>
   </div>
@@ -348,6 +425,24 @@
     font-weight: bold;
   }
 
+  .viewing {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: #1f2a3a;
+    color: #9ec2f0;
+    border-bottom: 1px solid #2f4466;
+  }
+
+  .viewing button {
+    margin-left: auto;
+  }
+
+  button.active {
+    background: #555;
+  }
+
   .banner {
     padding: 6px 12px;
     background: #4a3b12;
@@ -356,6 +451,7 @@
   }
 
   .body {
+    position: relative;
     display: flex;
     flex: 1;
     min-height: 0;
