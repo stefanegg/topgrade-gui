@@ -14,7 +14,11 @@ fn start_run(
     rows: u16,
     on_stream: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
-    let log_dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("logs");
+    let log_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("logs");
     runner.start(flags, cols, rows, &log_dir, on_stream)
 }
 
@@ -38,7 +42,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(Runner::default())
-        .invoke_handler(tauri::generate_handler![start_run, write_input, resize_pty, stop_run])
+        .invoke_handler(tauri::generate_handler![
+            start_run,
+            write_input,
+            resize_pty,
+            stop_run
+        ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {

@@ -8,8 +8,8 @@ export type StreamEvent =
   | { kind: "started"; logPath: string | null }
   | { kind: "exited"; code: number | null }
   | { kind: "error"; message: string }
-  | { kind: "stepStarted"; index: number; name: string }
-  | { kind: "summaryStarted" }
+  | { kind: "stepStarted"; index: number; name: string; group: string | null }
+  | { kind: "summaryStarted"; group: string | null }
   | {
       kind: "stepResult";
       stepIndex: number | null;
@@ -21,6 +21,8 @@ export type StreamEvent =
 
 export interface Step {
   name: string;
+  /** Nested topgrade run (e.g. inside Toolbx) this step belongs to. */
+  group: string | null;
   /** "running" until the next step starts; "done" if no summary line matched. */
   state: "running" | "done" | StepStatus;
   reason: string | null;

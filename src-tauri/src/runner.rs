@@ -29,8 +29,12 @@ pub enum RunEvent {
         /// Raw output is saved here; `None` if the file couldn't be created.
         log_path: Option<String>,
     },
-    Exited { code: Option<u32> },
-    Error { message: String },
+    Exited {
+        code: Option<u32>,
+    },
+    Error {
+        message: String,
+    },
 }
 
 struct ActiveRun {
@@ -65,7 +69,12 @@ impl Runner {
         }
 
         let pair = native_pty_system()
-            .openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
+            .openpty(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
             .map_err(|e| e.to_string())?;
 
         let mut child = pair
@@ -87,10 +96,14 @@ impl Runner {
 
         // Logging is best-effort: a run must not fail because of it.
         let log_path = log_file_path(log_dir, &flags);
-        let mut log = fs::create_dir_all(log_dir).and_then(|_| File::create(&log_path)).ok();
+        let mut log = fs::create_dir_all(log_dir)
+            .and_then(|_| File::create(&log_path))
+            .ok();
         send_event(
             &stream,
-            &RunEvent::Started { log_path: log.as_ref().map(|_| log_path.display().to_string()) },
+            &RunEvent::Started {
+                log_path: log.as_ref().map(|_| log_path.display().to_string()),
+            },
         );
 
         let output = stream.clone();
@@ -121,6 +134,9 @@ impl Runner {
                     send_bytes(&output, &buf[sent..n]);
                 }
             }
+            for event in parser.finish() {
+                send_event(&output, &event);
+            }
         });
 
         let active_ref = Arc::clone(&self.active);
@@ -134,20 +150,31 @@ impl Runner {
                 }
             }
             let event = match status {
-                Ok(status) => RunEvent::Exited { code: Some(status.exit_code()) },
-                Err(e) => RunEvent::Error { message: e.to_string() },
+                Ok(status) => RunEvent::Exited {
+                    code: Some(status.exit_code()),
+                },
+                Err(e) => RunEvent::Error {
+                    message: e.to_string(),
+                },
             };
             send_event(&stream, &event);
         });
 
-        *active = Some(ActiveRun { id, master: pair.master, writer, killer });
+        *active = Some(ActiveRun {
+            id,
+            master: pair.master,
+            writer,
+            killer,
+        });
         Ok(())
     }
 
     pub fn write(&self, data: &str) -> Result<(), String> {
         let mut active = self.active.lock().unwrap();
         let run = active.as_mut().ok_or("not running")?;
-        run.writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
+        run.writer
+            .write_all(data.as_bytes())
+            .map_err(|e| e.to_string())?;
         run.writer.flush().map_err(|e| e.to_string())
     }
 
@@ -155,7 +182,12 @@ impl Runner {
         let active = self.active.lock().unwrap();
         if let Some(run) = active.as_ref() {
             run.master
-                .resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
+                .resize(PtySize {
+                    rows,
+                    cols,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
                 .map_err(|e| e.to_string())?;
         }
         Ok(())
@@ -194,7 +226,11 @@ impl Runner {
 /// parser fixtures and for replay.
 fn log_file_path(dir: &Path, flags: &[String]) -> PathBuf {
     let stamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S");
-    let dry = if flags.iter().any(|f| f == "--dry-run" || f == "-n") { "-dry-run" } else { "" };
+    let dry = if flags.iter().any(|f| f == "--dry-run" || f == "-n") {
+        "-dry-run"
+    } else {
+        ""
+    };
     dir.join(format!("{stamp}-{}{dry}.log", std::env::consts::OS))
 }
 

@@ -35,11 +35,14 @@
     return f;
   }
 
-  function finishRunningStep() {
-    const last = steps.at(-1);
-    if (last?.state === "running") {
-      last.state = "done";
-      last.endedAt = Date.now();
+  /** Ends running steps of `group`; `null` (a top-level boundary) ends all,
+   *  since a nested run lives inside its top-level step (e.g. Toolbx). */
+  function finishRunningSteps(group: string | null) {
+    for (const step of steps) {
+      if (step.state === "running" && (group === null || step.group === group)) {
+        step.state = "done";
+        step.endedAt = Date.now();
+      }
     }
   }
 
@@ -51,9 +54,10 @@
         status = "Running…";
         break;
       case "stepStarted": {
-        finishRunningStep();
+        finishRunningSteps(e.group);
         steps.push({
           name: e.name,
+          group: e.group,
           state: "running",
           reason: null,
           startedAt: Date.now(),
@@ -64,7 +68,7 @@
         break;
       }
       case "summaryStarted":
-        finishRunningStep();
+        finishRunningSteps(e.group);
         summarySeen = true;
         break;
       case "stepResult": {
@@ -86,7 +90,7 @@
       }
       case "exited":
       case "error":
-        finishRunningStep();
+        finishRunningSteps(null);
         clearInputRequests();
         if (summarySeen) explainUnreported();
         running = false;

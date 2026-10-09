@@ -30,7 +30,8 @@
         <button
           class="step {step.state}"
           class:needs-input={step.needsInput}
-          title={step.reason ?? step.name}
+          class:nested={step.group !== null}
+          title={[step.group, step.name, step.reason].filter(Boolean).join(" · ")}
           onclick={() => onselect(step)}
         >
           <span class="icon">
@@ -111,6 +112,10 @@
 
   button.step:hover {
     background: #2f2f2f;
+  }
+
+  .step.nested {
+    padding-left: 30px;
   }
 
   .step.needs-input {

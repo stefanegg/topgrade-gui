@@ -3,10 +3,14 @@
 //! Step boundaries come from two signals: the OSC window title
 //! (`Topgrade - <Step>`) and the separator line (`── HH:MM:SS - <Step> ───`).
 //! Whichever arrives first starts the step; the other is deduplicated.
+//!
+//! Nested topgrade runs (e.g. inside Toolbx) prefix both with
+//! `TOPGRADE_PREFIX` as `(<prefix>) `; such steps get a `group` and have their
+//! own summary.
 
 use serde::Serialize;
 
-const TITLE_PREFIX: &str = "Topgrade - ";
+const TITLE_MARKER: &str = "Topgrade - ";
 const SUMMARY: &str = "Summary";
 /// Title topgrade sets while showing the retry prompt; not a step.
 const AWAITING_USER: &str = "Awaiting user";
@@ -14,8 +18,14 @@ const AWAITING_USER: &str = "Awaiting user";
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ParseEvent {
-    StepStarted { index: usize, name: String },
-    SummaryStarted,
+    StepStarted {
+        index: usize,
+        name: String,
+        group: Option<String>,
+    },
+    SummaryStarted {
+        group: Option<String>,
+    },
     #[serde(rename_all = "camelCase")]
     StepResult {
         /// Step this summary line belongs to; `None` if no step header matched.
@@ -24,7 +34,9 @@ pub enum ParseEvent {
         status: StepStatus,
         reason: Option<String>,
     },
-    Prompt { prompt: PromptKind },
+    Prompt {
+        prompt: PromptKind,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -49,6 +61,23 @@ pub struct Parser {
     state: State,
 }
 
+struct StepInfo {
+    group: Option<String>,
+    name: String,
+    matched: bool,
+}
+
+/// Last matched summary line; may still cover further steps (see
+/// `State::extend_last_match`).
+struct LastMatch {
+    index: usize,
+    /// Exact matches name one specific step and never extend.
+    exact: bool,
+    name: String,
+    status: StepStatus,
+    reason: Option<String>,
+}
+
 #[derive(Default)]
 struct State {
     line: String,
@@ -57,18 +86,22 @@ struct State {
     /// Prompt already reported for the current line.
     prompt_reported: bool,
     /// Step started from the title whose separator line is still expected.
-    awaiting_header: Option<String>,
-    steps: Vec<String>,
-    matched: Vec<bool>,
-    in_summary: bool,
+    awaiting_header: Option<(Option<String>, String)>,
+    steps: Vec<StepInfo>,
+    /// `Some(group)` while reading the summary of that group.
+    summary: Option<Option<String>>,
     /// Summary lines are in step order; only search steps from here on.
     summary_cursor: usize,
+    last_match: Option<LastMatch>,
     events: Vec<ParseEvent>,
 }
 
 impl Default for Parser {
     fn default() -> Self {
-        Self { vte: vte::Parser::new(), state: State::default() }
+        Self {
+            vte: vte::Parser::new(),
+            state: State::default(),
+        }
     }
 }
 
@@ -78,7 +111,8 @@ impl Parser {
     pub fn feed(&mut self, bytes: &[u8]) -> Vec<(usize, ParseEvent)> {
         let mut out = Vec::new();
         for (i, byte) in bytes.iter().enumerate() {
-            self.vte.advance(&mut self.state, std::slice::from_ref(byte));
+            self.vte
+                .advance(&mut self.state, std::slice::from_ref(byte));
             out.extend(self.state.events.drain(..).map(|e| (i + 1, e)));
         }
         // Prompts wait for input without a trailing newline, so check the
@@ -88,28 +122,52 @@ impl Parser {
         }
         out
     }
+
+    /// Call at end of output: flushes results still pending on lookahead.
+    pub fn finish(&mut self) -> Vec<ParseEvent> {
+        self.state.end_summary();
+        std::mem::take(&mut self.state.events)
+    }
 }
 
 impl State {
-    fn start_step(&mut self, name: String) {
+    fn start_step(&mut self, group: Option<String>, name: String) {
+        self.end_summary();
         if name == SUMMARY {
-            self.in_summary = true;
-            self.events.push(ParseEvent::SummaryStarted);
+            self.summary = Some(group.clone());
+            self.summary_cursor = 0;
+            self.events.push(ParseEvent::SummaryStarted { group });
             return;
         }
-        self.in_summary = false;
-        self.steps.push(name.clone());
-        self.matched.push(false);
-        self.events.push(ParseEvent::StepStarted { index: self.steps.len() - 1, name });
+        self.steps.push(StepInfo {
+            group: group.clone(),
+            name: name.clone(),
+            matched: false,
+        });
+        self.events.push(ParseEvent::StepStarted {
+            index: self.steps.len() - 1,
+            name,
+            group,
+        });
+    }
+
+    fn end_summary(&mut self) {
+        if self.summary.is_some() {
+            self.extend_last_match(self.steps.len());
+            self.summary = None;
+        }
     }
 
     fn on_title(&mut self, title: &str) {
-        let Some(name) = title.strip_prefix(TITLE_PREFIX) else { return };
+        let Some((prefix, name)) = title.split_once(TITLE_MARKER) else {
+            return;
+        };
         if name == AWAITING_USER {
             return;
         }
-        self.awaiting_header = Some(name.to_string());
-        self.start_step(name.to_string());
+        let group = parse_group(prefix.trim());
+        self.awaiting_header = Some((group.clone(), name.to_string()));
+        self.start_step(group, name.to_string());
     }
 
     fn on_line(&mut self) {
@@ -118,38 +176,88 @@ impl State {
         self.pending_cr = false;
         let line = line.trim();
 
-        if let Some(name) = parse_separator(line) {
+        if let Some((group, name)) = parse_separator(line) {
+            let header = (group, name.to_string());
             // Already started from the title.
-            if self.awaiting_header.take().as_deref() != Some(name) {
-                self.start_step(name.to_string());
+            if self.awaiting_header.take().as_ref() != Some(&header) {
+                self.start_step(header.0, header.1);
             }
             return;
         }
-        if self.in_summary {
+        if self.summary.is_some() {
             if let Some((name, status, reason)) = parse_result(line) {
-                let step_index = self.match_summary(name);
-                self.events.push(ParseEvent::StepResult {
-                    step_index,
-                    name: name.to_string(),
-                    status,
-                    reason: reason.map(str::to_string),
-                });
+                self.on_result(name, status, reason);
             }
         }
+    }
+
+    fn on_result(&mut self, name: &str, status: StepStatus, reason: Option<&str>) {
+        let matched = self.match_summary(name);
+        let step_index = matched.map(|(index, _)| index);
+        if let Some((index, exact)) = matched {
+            self.extend_last_match(index);
+            self.last_match = Some(LastMatch {
+                index,
+                exact,
+                name: name.to_string(),
+                status,
+                reason: reason.map(str::to_string),
+            });
+        }
+        self.events.push(ParseEvent::StepResult {
+            step_index,
+            name: name.to_string(),
+            status,
+            reason: reason.map(str::to_string),
+        });
     }
 
     /// Summary keys differ from separator names (`npm` vs
     /// `Node Package Manager`), and some steps have no summary line, so match
     /// fuzzily but in order: exact normalized match first, then fuzzy.
-    fn match_summary(&mut self, name: &str) -> Option<usize> {
-        let candidates = self.summary_cursor..self.steps.len();
-        let found = candidates
-            .clone()
-            .find(|&i| !self.matched[i] && normalize(&self.steps[i]) == normalize(name))
-            .or_else(|| candidates.clone().find(|&i| !self.matched[i] && fuzzy_match(&self.steps[i], name)))?;
-        self.matched[found] = true;
+    fn match_summary(&mut self, name: &str) -> Option<(usize, bool)> {
+        let group = self.summary.clone().flatten();
+        let candidates: Vec<usize> = (self.summary_cursor..self.steps.len())
+            .filter(|&i| !self.steps[i].matched && self.steps[i].group == group)
+            .collect();
+        let (found, exact) = candidates
+            .iter()
+            .find(|&&i| normalize(&self.steps[i].name) == normalize(name))
+            .map(|&i| (i, true))
+            .or_else(|| {
+                candidates
+                    .iter()
+                    .find(|&&i| fuzzy_match(&self.steps[i].name, name))
+                    .map(|&i| (i, false))
+            })?;
+        self.steps[found].matched = true;
         self.summary_cursor = found + 1;
-        Some(found)
+        Some((found, exact))
+    }
+
+    /// One summary line can cover several consecutive steps (`Flatpak` →
+    /// `Flatpak User Packages` + `Flatpak System Packages`). Once the next
+    /// line's step (`until`) is known, give the previous result to similar
+    /// unmatched steps in between. Only loose matches extend: `Claude Code`
+    /// names exactly one step and must not claim `Claude Code Plugins`.
+    fn extend_last_match(&mut self, until: usize) {
+        let Some(last) = self.last_match.take().filter(|last| !last.exact) else {
+            return;
+        };
+        let group = self.steps[last.index].group.clone();
+        for i in last.index + 1..until {
+            let step = &mut self.steps[i];
+            if step.matched || step.group != group || !fuzzy_match(&step.name, &last.name) {
+                continue;
+            }
+            step.matched = true;
+            self.events.push(ParseEvent::StepResult {
+                step_index: Some(i),
+                name: last.name.clone(),
+                status: last.status,
+                reason: last.reason.clone(),
+            });
+        }
     }
 
     fn detect_prompt(&mut self) -> Option<PromptKind> {
@@ -159,7 +267,11 @@ impl State {
         let line = self.line.trim_end();
         let prompt = if line.ends_with("(y)es/(N)o/(s)hell/(q)uit") {
             PromptKind::Retry
-        } else if line.ends_with("(Y)es/(N)o") {
+        } else if line.ends_with("(Y)es/(N)o")
+            // Package managers' own confirmations (dnf, apt, …).
+            || line.ends_with("[y/N]:")
+            || line.ends_with("[Y/n]:")
+        {
             PromptKind::YesNo
         } else if line.to_lowercase().ends_with("password:")
             || (line.starts_with("[sudo]") && line.ends_with(':'))
@@ -203,15 +315,27 @@ impl vte::Perform for State {
     }
 }
 
-/// `── HH:MM:SS - Name ────` (time optional) or `―― Name ――` (no-width fallback).
-fn parse_separator(line: &str) -> Option<&str> {
+/// `── [(<prefix>) ][HH:MM:SS - ]Name ────` or `―― [(<prefix>) ]Name ――`
+/// (no-width fallback).
+fn parse_separator(line: &str) -> Option<(Option<String>, &str)> {
     let message = if let Some(rest) = line.strip_prefix("── ") {
         rest.trim_end_matches('─').trim_end()
     } else {
         line.strip_prefix("―― ")?.strip_suffix(" ――")?
     };
+    let (group, message) = match message.strip_prefix('(').and_then(|m| m.split_once(") ")) {
+        Some((prefix, rest)) => (parse_group(&format!("({prefix})")), rest),
+        None => (None, message),
+    };
     let name = strip_time(message).trim();
-    (!name.is_empty()).then_some(name)
+    (!name.is_empty()).then_some((group, name))
+}
+
+/// `('Toolbx fedora-toolbox-44')` → `Toolbx fedora-toolbox-44`.
+fn parse_group(prefix: &str) -> Option<String> {
+    let inner = prefix.strip_prefix('(')?.strip_suffix(')')?;
+    let inner = inner.trim_matches(|c| c == '\'' || c == '"').trim();
+    (!inner.is_empty()).then(|| inner.to_string())
 }
 
 fn strip_time(message: &str) -> &str {
@@ -240,7 +364,9 @@ fn parse_result(line: &str) -> Option<(&str, StepStatus, Option<&str>)> {
     for (pos, _) in line.match_indices(": ") {
         let (name, rest) = (&line[..pos], &line[pos + 2..]);
         for (word, status) in STATUSES {
-            let Some(after) = rest.strip_prefix(word) else { continue };
+            let Some(after) = rest.strip_prefix(word) else {
+                continue;
+            };
             if after.is_empty() {
                 return Some((name, status, None));
             }
@@ -290,7 +416,10 @@ mod tests {
     use super::*;
 
     fn events(input: &[u8]) -> Vec<ParseEvent> {
-        Parser::default().feed(input).into_iter().map(|(_, e)| e).collect()
+        let mut parser = Parser::default();
+        let mut events: Vec<_> = parser.feed(input).into_iter().map(|(_, e)| e).collect();
+        events.extend(parser.finish());
+        events
     }
 
     fn step_names(events: &[ParseEvent]) -> Vec<&str> {
@@ -303,28 +432,55 @@ mod tests {
             .collect()
     }
 
+    /// Final per-step outcome: (group, step name, summary name, status).
+    type Outcome = (Option<String>, String, Option<String>, Option<StepStatus>);
+
+    /// Folds events into one row per step plus unmatched summary names.
+    fn outcomes(events: &[ParseEvent]) -> (Vec<Outcome>, Vec<String>) {
+        let mut steps: Vec<Outcome> = Vec::new();
+        let mut unmatched = Vec::new();
+        for e in events {
+            match e {
+                ParseEvent::StepStarted { index, name, group } => {
+                    assert_eq!(*index, steps.len());
+                    steps.push((group.clone(), name.clone(), None, None));
+                }
+                ParseEvent::StepResult {
+                    step_index: Some(i),
+                    name,
+                    status,
+                    ..
+                } => {
+                    let step = &mut steps[*i];
+                    assert!(step.3.is_none(), "{} matched twice", step.1);
+                    step.2 = Some(name.clone());
+                    step.3 = Some(*status);
+                }
+                ParseEvent::StepResult {
+                    step_index: None,
+                    name,
+                    ..
+                } => unmatched.push(name.clone()),
+                _ => {}
+            }
+        }
+        (steps, unmatched)
+    }
+
+    fn summary_name<'a>(steps: &'a [Outcome], group: Option<&str>, step: &str) -> Option<&'a str> {
+        let row = steps
+            .iter()
+            .find(|s| s.0.as_deref() == group && s.1 == step)
+            .unwrap_or_else(|| panic!("no step {step}"));
+        row.2.as_deref()
+    }
+
     #[test]
     fn macos_dry_run_fixture() {
-        let input = include_bytes!("../tests/fixtures/macos-dry-run.log");
-        let events = events(input);
-
-        let steps = step_names(&events);
+        let events = events(include_bytes!("../tests/fixtures/macos-dry-run.log"));
+        let (steps, unmatched) = outcomes(&events);
         assert_eq!(steps.len(), 23);
-        assert_eq!(steps[0], "macOS system update");
-        assert_eq!(steps[22], "Brew - Cask");
-        assert_eq!(events.iter().filter(|e| **e == ParseEvent::SummaryStarted).count(), 1);
-
-        let results: Vec<_> = events
-            .iter()
-            .filter_map(|e| match e {
-                ParseEvent::StepResult { step_index, name, status, .. } => {
-                    Some((step_index.map(|i| steps[i]), name.as_str(), *status))
-                }
-                _ => None,
-            })
-            .collect();
-        assert_eq!(results.len(), 21);
-        assert!(results.iter().all(|(_, _, s)| *s == StepStatus::Ok));
+        assert!(unmatched.is_empty());
         for (step, summary) in [
             ("macOS system update", "System update"),
             ("Bun Packages", "bun-packages"),
@@ -338,24 +494,135 @@ mod tests {
             ("Brew", "Brew (ARM)"),
             ("Brew - Cask", "Brew Cask (ARM)"),
         ] {
-            assert!(results.contains(&(Some(step), summary, StepStatus::Ok)), "{summary} -> {step}");
+            assert_eq!(summary_name(&steps, None, step), Some(summary), "{step}");
         }
-        assert!(results.iter().all(|(step, _, _)| step.is_some()));
+        // Abort with a DryRun error, so topgrade doesn't report them.
+        assert_eq!(summary_name(&steps, None, "Claude Code Plugins"), None);
+        assert_eq!(summary_name(&steps, None, "uv"), None);
+    }
+
+    #[test]
+    fn macos_run_fixture() {
+        let events = events(include_bytes!("../tests/fixtures/macos-run.log"));
+        let (steps, unmatched) = outcomes(&events);
+        assert_eq!(steps.len(), 22);
+        assert!(unmatched.is_empty());
+        assert!(
+            steps.iter().all(|s| s.3 == Some(StepStatus::Ok)),
+            "{steps:#?}"
+        );
+        assert_eq!(
+            summary_name(&steps, None, "Claude Code Plugins"),
+            Some("Claude Code Plugins")
+        );
+    }
+
+    #[test]
+    fn fedora_run_fixture() {
+        let events = events(include_bytes!("../tests/fixtures/fedora-run.log"));
+        let (steps, unmatched) = outcomes(&events);
+        assert_eq!(steps.len(), 20);
+        // No separator for this step.
+        assert_eq!(unmatched, ["config-update"]);
+
+        // Nested topgrade inside Toolbx: own group and own summary.
+        let toolbx = Some("Toolbx fedora-toolbox-44");
+        assert_eq!(
+            summary_name(&steps, toolbx, "System update"),
+            Some("System update")
+        );
+        assert_eq!(
+            summary_name(&steps, None, "System update"),
+            Some("System update")
+        );
+        assert_eq!(summary_name(&steps, None, "Toolbx"), Some("toolbx"));
+        assert!(events.contains(&ParseEvent::SummaryStarted {
+            group: toolbx.map(Into::into)
+        }));
+
+        // One summary line covering several steps.
+        assert_eq!(
+            summary_name(&steps, None, "Flatpak User Packages"),
+            Some("Flatpak")
+        );
+        assert_eq!(
+            summary_name(&steps, None, "Flatpak System Packages"),
+            Some("Flatpak")
+        );
+        assert_eq!(summary_name(&steps, None, "Nix Channels"), Some("nix"));
+        assert_eq!(summary_name(&steps, None, "Nix Profiles"), Some("nix"));
+        assert_eq!(
+            summary_name(&steps, None, "Firmware upgrades"),
+            Some("Firmware")
+        );
+        assert_eq!(
+            summary_name(&steps, None, "Claude Code"),
+            Some("Claude Code")
+        );
+        assert_eq!(
+            summary_name(&steps, None, "Claude Code Plugins"),
+            Some("Claude Code Plugins")
+        );
+
+        // Skipped silently (nothing installed), so not in the summary.
+        assert_eq!(summary_name(&steps, None, "Node Package Manager"), None);
+        assert_eq!(
+            summary_name(&steps, None, "Performant Node Package Manager"),
+            None
+        );
+    }
+
+    fn chunked_events(input: &[u8], size: usize) -> Vec<ParseEvent> {
+        let mut parser = Parser::default();
+        let mut events: Vec<_> = input
+            .chunks(size)
+            .flat_map(|c| parser.feed(c))
+            .map(|(_, e)| e)
+            .collect();
+        events.extend(parser.finish());
+        events
+    }
+
+    fn is_prompt(e: &ParseEvent) -> bool {
+        matches!(e, ParseEvent::Prompt { .. })
     }
 
     #[test]
     fn chunking_does_not_change_events() {
-        let input = include_bytes!("../tests/fixtures/macos-dry-run.log");
-        let whole = events(input);
-        for size in [1, 7, 100, 4096] {
-            let mut parser = Parser::default();
-            let chunked: Vec<_> = input
-                .chunks(size)
-                .flat_map(|c| parser.feed(c))
-                .map(|(_, e)| e)
-                .collect();
-            assert_eq!(chunked, whole, "chunk size {size}");
+        for input in [
+            &include_bytes!("../tests/fixtures/macos-dry-run.log")[..],
+            &include_bytes!("../tests/fixtures/fedora-run.log")[..],
+        ] {
+            let whole = events(input);
+            for size in [1, 7, 100, 4096] {
+                // Prompts are only seen at chunk ends (where a real PTY read
+                // stops while topgrade waits), so they depend on chunking.
+                let mut chunked = chunked_events(input, size);
+                chunked.retain(|e| !is_prompt(e));
+                assert_eq!(chunked, whole, "chunk size {size}");
+            }
         }
+    }
+
+    #[test]
+    fn fedora_prompts_detected_when_streamed() {
+        let events = chunked_events(include_bytes!("../tests/fixtures/fedora-run.log"), 1);
+        let prompts: Vec<_> = events.iter().filter(|e| is_prompt(e)).collect();
+        assert_eq!(
+            prompts,
+            [
+                &ParseEvent::Prompt {
+                    prompt: PromptKind::Password
+                },
+                // dnf on the host, then inside Toolbx
+                &ParseEvent::Prompt {
+                    prompt: PromptKind::YesNo
+                },
+                &ParseEvent::Prompt {
+                    prompt: PromptKind::YesNo
+                },
+            ]
+        );
     }
 
     #[test]
@@ -373,9 +640,34 @@ mod tests {
     }
 
     #[test]
-    fn separator_without_time() {
-        assert_eq!(parse_separator("── Flatpak ──────"), Some("Flatpak"));
+    fn separator_variants() {
+        assert_eq!(
+            parse_separator("── Flatpak ──────"),
+            Some((None, "Flatpak"))
+        );
+        assert_eq!(
+            parse_separator("── ('Toolbx f44') 13:36:09 - System update ────"),
+            Some((Some("Toolbx f44".into()), "System update"))
+        );
+        assert_eq!(
+            parse_separator("―― (box) dnf ――"),
+            Some((Some("box".into()), "dnf"))
+        );
         assert_eq!(parse_separator("some output ── here"), None);
+    }
+
+    #[test]
+    fn prefixed_title_dedupes_with_header() {
+        let input = "\x1b]0;('box') Topgrade - dnf\x07\r\n── ('box') 10:00:00 - dnf ──\r\n";
+        let events = events(input.as_bytes());
+        assert_eq!(
+            events,
+            [ParseEvent::StepStarted {
+                index: 0,
+                name: "dnf".into(),
+                group: Some("box".into())
+            }]
+        );
     }
 
     #[test]
@@ -410,6 +702,14 @@ mod tests {
     }
 
     #[test]
+    fn last_result_extends_to_similar_steps_at_end() {
+        let input = "── A ──\r\n── Flatpak User ──\r\n── Flatpak System ──\r\n\
+            ── Summary ──\r\nA: OK\r\nFlatpak: FAILED\r\n";
+        let (steps, _) = outcomes(&events(input.as_bytes()));
+        assert_eq!(steps[2].3, Some(StepStatus::Failed));
+    }
+
+    #[test]
     fn result_lines_outside_summary_are_ignored() {
         let events = events(b"Foo: OK\r\n");
         assert!(events.is_empty());
@@ -421,19 +721,46 @@ mod tests {
         let retry = "\r\n\x1b[33;1mRetry? (y)es/(N)o/(s)hell/(q)uit\x1b[0m";
         assert_eq!(
             parser.feed(retry.as_bytes()),
-            [(retry.len(), ParseEvent::Prompt { prompt: PromptKind::Retry })]
+            [(
+                retry.len(),
+                ParseEvent::Prompt {
+                    prompt: PromptKind::Retry
+                }
+            )]
         );
         assert!(parser.feed(b"").is_empty());
 
-        assert_eq!(events(b"Password:"), [ParseEvent::Prompt { prompt: PromptKind::Password }]);
+        assert_eq!(
+            events(b"Password:"),
+            [ParseEvent::Prompt {
+                prompt: PromptKind::Password
+            }]
+        );
         assert_eq!(
             events(b"[sudo] password for s: "),
-            [ParseEvent::Prompt { prompt: PromptKind::Password }]
+            [ParseEvent::Prompt {
+                prompt: PromptKind::Password
+            }]
         );
-        assert_eq!(
-            events(b"Continue? (Y)es/(N)o"),
-            [ParseEvent::Prompt { prompt: PromptKind::YesNo }]
-        );
+        for input in [
+            &b"Continue? (Y)es/(N)o"[..],
+            b"Is this ok [y/N]: ",
+            b"Do you want to continue? [Y/n] :",
+        ] {
+            let expected = if input.ends_with(b"n] :") {
+                vec![]
+            } else {
+                vec![ParseEvent::Prompt {
+                    prompt: PromptKind::YesNo,
+                }]
+            };
+            assert_eq!(
+                events(input),
+                expected,
+                "{}",
+                String::from_utf8_lossy(input)
+            );
+        }
     }
 
     #[test]
