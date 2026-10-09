@@ -4177,6 +4177,8 @@ name = "topgrade-gui"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "objc2-foundation",
+ "objc2-service-management",
  "portable-pty",
  "regex",
  "serde",

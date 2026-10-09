@@ -31,7 +31,21 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Utility",
+    "shortDescription": "Desktop GUI for topgrade",
+    "longDescription": "Runs topgrade in an embedded terminal, splits output into steps with results, lists what each step updated, keeps a history of runs and reminds you from the tray when an update is overdue.",
+    "copyright": "Stefan Eggenschwiler",
+    "macOS": {
+      "minimumSystemVersion": "13.0"
+    },
+    "linux": {
+      "rpm": {
+        "depends": [
+          "libappindicator-gtk3"
+        ]
+      }
+    }
   },
   "mainBinaryName": "topgrade-gui"
 }

@@ -1,3 +1,4 @@
+mod autostart;
 mod extractors;
 mod history;
 mod parser;
@@ -12,11 +13,11 @@ use runner::Runner;
 use settings::Settings;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Manager, State, WindowEvent};
-use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tray::AppState;
 
-/// Passed by the login item; the app starts hidden anyway, but this keeps
-/// login launches identifiable.
+/// Passed by the Linux autostart entry; the app starts hidden anyway, but
+/// this keeps login launches identifiable.
+#[cfg(not(target_os = "macos"))]
 const HIDDEN_ARG: &str = "--hidden";
 
 #[tauri::command]
@@ -80,24 +81,9 @@ fn set_settings(app: AppHandle, state: State<AppState>, settings: Settings) -> R
         changed
     };
     if autostart_changed {
-        apply_autostart(&app, settings.autostart)?;
+        autostart::apply(&app, settings.autostart)?;
     }
     Ok(())
-}
-
-/// Registers or removes the login item. Skipped in dev builds, which would
-/// register the debug binary.
-fn apply_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {
-    if cfg!(debug_assertions) {
-        return Ok(());
-    }
-    let autolaunch = app.autolaunch();
-    let result = if enabled {
-        autolaunch.enable()
-    } else {
-        autolaunch.disable()
-    };
-    result.map_err(|e| e.to_string())
 }
 
 /// Dev builds only: replays a log from `tests/fixtures` (UI testing without
@@ -117,10 +103,11 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = app.path().app_data_dir()?;
     let (settings, existed) = settings::load(&data_dir);
     if !existed {
-        // First launch: persist defaults and register the login item.
         settings::save(&data_dir, &settings)?;
-        let _ = apply_autostart(app, settings.autostart);
     }
+    // Keep the login item in sync with the setting (also registers it on the
+    // first release launch, and re-points it if the app moved).
+    let _ = autostart::apply(app, settings.autostart);
     app.manage(AppState::new(data_dir, settings));
     tray::setup(app)?;
 
@@ -137,13 +124,15 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(
-            tauri_plugin_autostart::Builder::new()
-                .macos_launcher(MacosLauncher::LaunchAgent)
-                .arg(HIDDEN_ARG)
-                .build(),
-        )
+    let builder = tauri::Builder::default();
+    // macOS uses SMAppService directly (see autostart.rs).
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.plugin(
+        tauri_plugin_autostart::Builder::new()
+            .arg(HIDDEN_ARG)
+            .build(),
+    );
+    builder
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Runner::default())

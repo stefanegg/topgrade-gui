@@ -27,7 +27,6 @@ vte = "0.15.0"
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 regex = "1.13.1"
 tauri-plugin-notification = "2"
-tauri-plugin-autostart = "2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
@@ -37,3 +36,10 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSError", "NSString"] }
+objc2-service-management = { version = "0.3.2", features = ["SMAppService"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+tauri-plugin-autostart = "2"
