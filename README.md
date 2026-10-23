@@ -51,7 +51,7 @@ Dev builds have a "Replay fixture…" menu that plays the logs in `src-tauri/tes
 
 The app version is derived from git tags at build time (`src-tauri/build.rs`) and shown in Settings: a tagged commit `v1.2.3` is `1.2.3`; later commits are `1.2.3-dev.N+gSHA`; uncommitted changes add `+dirty`. Without any `v*` tag it falls back to the version in `Cargo.toml`.
 
-To release, add entries under `Unreleased` in `CHANGELOG.md`, then run `scripts/release.sh X.Y.Z` from a clean tree. It writes the version into `package.json`, `Cargo.toml`, `Cargo.lock` and `tauri.conf.json`, dates the changelog entry, commits and tags `vX.Y.Z`. Building that tag (`pnpm tauri build`) gives bundle file names and an in-app version that all read `X.Y.Z`. Publish with `git push --follow-tags`.
+To release, add entries under `Unreleased` in `CHANGELOG.md`, then run `scripts/release.sh X.Y.Z` from a clean tree. It writes the version into `package.json`, `Cargo.toml`, `Cargo.lock` and `tauri.conf.json`, dates the changelog entry, commits and tags `vX.Y.Z`. Building that tag (`pnpm tauri build`) gives bundle file names and an in-app version that all read `X.Y.Z`. Publish with `git push --follow-tags`: pushing the tag starts `.github/workflows/release.yml`, which builds the Linux (AppImage, deb, rpm) and macOS (dmg) installers and attaches them to a GitHub Release with the changelog section as notes. To (re)build an existing tag, run the workflow manually with the tag name.
 
 ## Data
 

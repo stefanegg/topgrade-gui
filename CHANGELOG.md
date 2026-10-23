@@ -6,6 +6,9 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+### Added
+- GitHub Actions workflow that builds installers and publishes a GitHub Release for every version tag.
+
 ## 0.2.0 - 2026-10-23
 
 ### Added
