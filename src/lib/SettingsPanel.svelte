@@ -92,7 +92,7 @@
     {/if}
   </div>
   <p class="hint">
-    The --cleanup and -y toggles in the toolbar are saved too, and are used by Run now in the tray.
+    The “Clean up afterwards” and “Don't ask for confirmation” options in the toolbar are saved too, and are used by Run now in the tray.
   </p>
   <div class="field">
     <h3>About</h3>

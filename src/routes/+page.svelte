@@ -396,23 +396,25 @@
   <header>
     <button class="primary" onclick={run} disabled={running}>Run</button>
     <button onclick={stop} disabled={!running || viewing !== null}>Stop</button>
-    <label>
+    <label title="Also delete temporary files and old leftovers after updating (topgrade --cleanup)">
       <input
         type="checkbox"
         bind:checked={cleanup}
         disabled={running}
         onchange={(e) => updateSettings({ cleanup: e.currentTarget.checked })}
-      /> --cleanup
+      /> Clean up afterwards
     </label>
-    <label>
+    <label title="Answer yes to confirmation questions so the run doesn't wait for you (topgrade -y)">
       <input
         type="checkbox"
         bind:checked={assumeYes}
         disabled={running}
         onchange={(e) => updateSettings({ assumeYes: e.currentTarget.checked })}
-      /> -y
+      /> Don't ask for confirmation
     </label>
-    <label><input type="checkbox" bind:checked={dryRun} disabled={running} /> --dry-run</label>
+    <label title="Only show what would be updated, without changing anything (topgrade --dry-run)">
+      <input type="checkbox" bind:checked={dryRun} disabled={running} /> Preview only (dry run)
+    </label>
     {#if import.meta.env.DEV}
       <select
         disabled={running}
@@ -551,7 +553,6 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    font-family: Menlo, monospace;
   }
 
   button {

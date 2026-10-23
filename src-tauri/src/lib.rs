@@ -163,6 +163,8 @@ pub fn run() {
             // Also save on blur so geometry survives a logout or crash
             // while the window is open.
             WindowEvent::Focused(false) => tray::save_window_state(window.app_handle()),
+            #[cfg(not(target_os = "macos"))]
+            WindowEvent::ThemeChanged(_) => tray::update_icon(window.app_handle()),
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![

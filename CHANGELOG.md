@@ -6,6 +6,13 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+### Changed
+- Toolbar options now use plain-language labels in the normal UI font (with the topgrade flag in the tooltip) instead of bare monospaced flags.
+- On Linux the tray icon is a flat white or black glyph matching the light/dark theme instead of the colorful app icon.
+
+### Fixed
+- The window now sets its icon explicitly, so the taskbar no longer shows a blank icon on Linux.
+
 ## 0.4.1 - 2026-10-23
 
 ### Changed

@@ -57,20 +57,10 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let separator = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&run, &last_run, &separator, &update, &open, &quit])?;
 
-    // macOS: monochrome template image the system tints for light/dark menu
-    // bars. Elsewhere (e.g. KDE) template images aren't supported, so use the
-    // colored app icon.
-    let (icon, template) = if cfg!(target_os = "macos") {
-        (
-            include_bytes!("../icons/tray-template.png").as_slice(),
-            true,
-        )
-    } else {
-        (include_bytes!("../icons/32x32.png").as_slice(), false)
-    };
+    let (icon, template) = tray_icon(app);
 
     TrayIconBuilder::with_id("main")
-        .icon(Image::from_bytes(icon)?)
+        .icon(icon)
         .icon_as_template(template)
         .tooltip("Topgrade GUI")
         .menu(&menu)
@@ -97,6 +87,40 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// macOS: monochrome template image the system tints for light/dark menu
+/// bars. Elsewhere template images aren't supported, so pick a flat white or
+/// black glyph to match the theme, like the other tray icons.
+fn tray_icon(app: &AppHandle) -> (Image<'static>, bool) {
+    let (bytes, template) = if cfg!(target_os = "macos") {
+        (
+            include_bytes!("../icons/tray-template.png").as_slice(),
+            true,
+        )
+    } else if app
+        .get_webview_window("main")
+        .and_then(|w| w.theme().ok())
+        .is_some_and(|t| t == tauri::Theme::Light)
+    {
+        (include_bytes!("../icons/tray-dark.png").as_slice(), false)
+    } else {
+        (include_bytes!("../icons/tray-light.png").as_slice(), false)
+    };
+    (
+        Image::from_bytes(bytes)
+            .expect("bundled tray icon")
+            .to_owned(),
+        template,
+    )
+}
+
+/// Re-picks the tray glyph after a light/dark theme change.
+#[cfg(not(target_os = "macos"))]
+pub fn update_icon(app: &AppHandle) {
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_icon(Some(tray_icon(app).0));
+    }
+}
+
 pub fn show_window(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
@@ -105,6 +129,14 @@ pub fn show_window(app: &AppHandle) {
             window_state::restore(&app.state::<AppState>().data_dir, &window);
         }
         let _ = window.show();
+        // X11 reads the taskbar icon from the window, not only from the
+        // .desktop file. The default 512px icon doesn't make it into
+        // _NET_WM_ICON, so set a smaller one once the window is mapped.
+        if let Ok(icon) = Image::from_bytes(include_bytes!("../icons/128x128.png")) {
+            if let Err(e) = window.set_icon(icon) {
+                eprintln!("could not set window icon: {e}");
+            }
+        }
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
