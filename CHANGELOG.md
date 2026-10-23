@@ -6,6 +6,8 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+## 0.4.1 - 2026-10-23
+
 ### Changed
 - The window now runs with a strict Content Security Policy.
 
