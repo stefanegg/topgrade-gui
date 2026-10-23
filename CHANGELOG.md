@@ -6,6 +6,8 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+## 0.4.4 - 2026-10-23
+
 ### Fixed
 - macOS build failed after the single-instance change in 0.4.3; no macOS build of 0.4.3 was published.
 
