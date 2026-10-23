@@ -2,6 +2,8 @@
 
 Desktop GUI for [topgrade](https://github.com/topgrade-rs/topgrade) (Tauri + Svelte), for macOS and Fedora KDE.
 
+![Topgrade GUI showing a finished run: steps with status, update counts and durations on the left, the terminal output on the right](docs/screenshot.png)
+
 - Runs topgrade in an embedded terminal (type sudo passwords and answers there)
 - Splits the output into steps with status, duration and what each step updated
 - Keeps the last 12 runs with their logs and summaries (History)
