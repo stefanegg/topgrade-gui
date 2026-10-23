@@ -6,10 +6,21 @@ Desktop GUI for [topgrade](https://github.com/topgrade-rs/topgrade) (Tauri + Sve
 - Splits the output into steps with status, duration and what each step updated
 - Keeps the last 12 runs with their logs and summaries (History)
 - Lives in the tray: Run now, last run, and a reminder when an update is overdue
+- Zoom the terminal font with Shift + mouse wheel (remembered)
+- Updates itself from signed GitHub Releases (asks first)
 
 Requires `topgrade` on your login shell's `PATH`.
 
-## Build and install
+## Install
+
+Download the latest installer from the [Releases](https://github.com/stefanegg/topgrade-gui/releases) page:
+
+- **Fedora:** `sudo dnf install ./Topgrade.GUI-*.rpm` (a `.deb` and an `.AppImage` are available too)
+- **macOS (Apple Silicon):** open the `.dmg` and copy the app to `/Applications` before the first launch (the login item points to the app's location). The build is unsigned, so macOS may ask you to confirm the first start in System Settings → Privacy & Security.
+
+The app then keeps itself up to date, see [Auto-update](#auto-update).
+
+## Build from source
 
 ### macOS
 
@@ -18,7 +29,7 @@ pnpm install
 pnpm build:mac
 ```
 
-Outputs `src-tauri/target/release/bundle/macos/Topgrade GUI.app` and a `.dmg` in `bundle/dmg/`. Copy the app to `/Applications` before the first launch (the login item points to the app's location). The build is unsigned; a locally built app runs without Gatekeeper prompts.
+Outputs `src-tauri/target/release/bundle/macos/Topgrade GUI.app` and a `.dmg` in `bundle/dmg/`. Copy the app to `/Applications` before the first launch (the login item points to the app's location). A locally built app runs without Gatekeeper prompts.
 
 ### Fedora
 
@@ -57,10 +68,10 @@ To release, add entries under `Unreleased` in `CHANGELOG.md`, then run `scripts/
 
 The app checks `releases/latest/download/latest.json` on GitHub (first after 2 minutes, then every 6 hours; Settings can turn this off), shows a banner in the window and an "Install update …" tray item, and on confirmation downloads the update, verifies its signature against the public key in `tauri.conf.json`, installs it and restarts. AppImage and macOS builds are replaced in place; an RPM install is upgraded through `pkexec` (password prompt). Updates are refused while a topgrade run is active.
 
-Release builds are signed in CI with the `TAURI_SIGNING_PRIVATE_KEY` repository secret. The private key lives in `~/.tauri/topgrade-gui.key` on the maintainer's machine — keep a backup; without it installed apps can't be updated. Local `pnpm tauri build` runs need it too: `export TAURI_SIGNING_PRIVATE_KEY=~/.tauri/topgrade-gui.key TAURI_SIGNING_PRIVATE_KEY_PASSWORD=`.
+Release builds are signed in CI with the `TAURI_SIGNING_PRIVATE_KEY` repository secret. The private key lives in `~/.tauri/topgrade-gui.key` on the maintainer's machine — keep a backup; without it installed apps can't be updated. Local `pnpm build:linux` / `pnpm build:mac` runs need it too (they create update artifacts): `export TAURI_SIGNING_PRIVATE_KEY=~/.tauri/topgrade-gui.key TAURI_SIGNING_PRIVATE_KEY_PASSWORD=`.
 
 ## Data
 
-`~/Library/Application Support/dev.eggenschwiler.topgrade-gui/` (macOS) or `~/.local/share/dev.eggenschwiler.topgrade-gui/` (Linux): `settings.json` and `logs/` (raw log + JSON summary per run).
+`~/Library/Application Support/dev.topgradegui.desktop/` (macOS) or `~/.local/share/dev.topgradegui.desktop/` (Linux): `settings.json` and `logs/` (raw log + JSON summary per run).
 
 The window reopens with its last size and position (`window.json`), unless the monitor setup changed since. On Linux the app runs via XWayland so it can place its window (set `GDK_BACKEND` to override).

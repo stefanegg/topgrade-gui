@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Topgrade GUI",
   "version": "0.3.0",
-  "identifier": "dev.eggenschwiler.topgrade-gui",
+  "identifier": "dev.topgradegui.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -36,7 +36,7 @@
     "category": "Utility",
     "shortDescription": "Desktop GUI for topgrade",
     "longDescription": "Runs topgrade in an embedded terminal, splits output into steps with results, lists what each step updated, keeps a history of runs and reminds you from the tray when an update is overdue.",
-    "copyright": "Stefan Eggenschwiler",
+    "copyright": "Topgrade GUI contributors",
     "macOS": {
       "minimumSystemVersion": "13.0"
     },

@@ -2,7 +2,9 @@
 name = "topgrade-gui"
 version = "0.3.0"
 description = "Desktop GUI for topgrade"
-authors = ["Stefan Eggenschwiler"]
+authors = ["Topgrade GUI contributors"]
+license = "MIT"
+repository = "https://github.com/stefanegg/topgrade-gui"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
