@@ -11,6 +11,8 @@ Desktop GUI for [topgrade](https://github.com/topgrade-rs/topgrade) (Tauri + Sve
 
 Requires `topgrade` on your login shell's `PATH`.
 
+> **Note:** this is a personal project, published as is. There is no support, and issues and pull requests are not monitored. Feel free to fork it.
+
 ## Install
 
 Download the latest installer from the [Releases](https://github.com/stefanegg/topgrade-gui/releases) page:
