@@ -9,9 +9,9 @@ Desktop GUI for [topgrade](https://github.com/topgrade-rs/topgrade) (Tauri + Sve
 - Zoom the terminal font with Shift + mouse wheel (remembered)
 - Updates itself from signed GitHub Releases (asks first)
 
-Requires `topgrade` on your login shell's `PATH`.
+Requires `topgrade` on your login shell's `PATH`. Builds are provided for Linux x86_64 (RPM, deb, AppImage) and macOS on Apple Silicon.
 
-> **Note:** this is a personal project, published as is. There is no support, and issues and pull requests are not monitored. Feel free to fork it.
+> **Note:** this is an unofficial personal project, not affiliated with the topgrade project, and published as is. There is no support, and issues and pull requests are not monitored. Feel free to fork it.
 
 ## Install
 
