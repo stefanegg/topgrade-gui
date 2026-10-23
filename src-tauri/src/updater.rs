@@ -1,7 +1,7 @@
 //! Self-update from GitHub Releases via tauri-plugin-updater: the release's
 //! signed `latest.json` is checked in the background, the user is asked in the
 //! tray menu and in the window, and the update is then downloaded, verified
-//! and installed (AppImage/macOS replace in place, RPM goes through pkexec).
+//! and installed (AppImage/macOS replace in place, RPM/deb go through pkexec).
 
 use std::sync::Mutex;
 use std::thread;
