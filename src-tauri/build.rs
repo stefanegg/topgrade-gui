@@ -32,7 +32,11 @@ fn version() -> String {
         (None, None) => fallback,
     };
     if dirty {
-        version.push_str(if version.contains('+') { ".dirty" } else { "+dirty" });
+        version.push_str(if version.contains('+') {
+            ".dirty"
+        } else {
+            "+dirty"
+        });
     }
     version
 }
