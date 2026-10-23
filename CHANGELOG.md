@@ -6,6 +6,8 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+## 0.4.3 - 2026-10-23
+
 ### Fixed
 - Only one instance of the app runs at a time; launching it again brings up the existing window.
 
