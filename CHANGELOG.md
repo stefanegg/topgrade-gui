@@ -6,6 +6,8 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+## 0.4.0 - 2026-10-23
+
 ### Changed
 - The app identifier is now `dev.topgradegui.desktop`, so the data folder moved; copy the contents of the old folder over to keep settings and history.
 
