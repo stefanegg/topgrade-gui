@@ -1,7 +1,7 @@
 {
   "name": "topgrade-gui",
   "version": "0.4.0",
-  "description": "Desktop GUI for topgrade",
+  "description": "Desktop wrapper for topgrade",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
