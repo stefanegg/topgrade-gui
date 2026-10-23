@@ -201,6 +201,10 @@ impl Runner {
         Ok(())
     }
 
+    pub fn is_running(&self) -> bool {
+        self.active.lock().unwrap().is_some()
+    }
+
     /// Hard-kills any running child; used when the app exits.
     pub fn kill(&self) {
         if let Some(run) = self.active.lock().unwrap().as_mut() {

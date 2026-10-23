@@ -18,6 +18,7 @@
     type Settings,
     type Step,
     type StreamEvent,
+    type UpdateInfo,
     type UnmatchedResult,
   } from "$lib/run";
 
@@ -50,6 +51,39 @@
   let settings = $state<Settings | null>(null);
   let showSettings = $state(false);
   let version = $state("");
+
+  let update = $state<UpdateInfo | null>(null);
+  let updateDismissed = $state(false);
+  let updateMessage = $state("");
+  let checkingUpdate = $state(false);
+  let installing = $state(false);
+  let downloadPercent = $state<number | null>(null);
+
+  async function checkForUpdate() {
+    checkingUpdate = true;
+    updateMessage = "Checking…";
+    try {
+      update = await invoke<UpdateInfo | null>("check_for_update");
+      updateDismissed = false;
+      updateMessage = update ? `Version ${update.version} is available.` : "You're on the latest version.";
+    } catch (err) {
+      updateMessage = `Update check failed: ${err}`;
+    } finally {
+      checkingUpdate = false;
+    }
+  }
+
+  async function installUpdate() {
+    installing = true;
+    downloadPercent = null;
+    try {
+      await invoke("install_update"); // restarts the app on success
+    } catch (err) {
+      installing = false;
+      updateMessage = `Update failed: ${err}`;
+      status = updateMessage;
+    }
+  }
 
   async function loadSettings() {
     settings = await invoke<Settings>("get_settings").catch(() => null);
@@ -327,9 +361,24 @@
     loadHistory();
     loadSettings();
     invoke<string>("app_version").then((v) => (version = v)).catch(() => {});
-    const unlisten = listen("run-requested", runFromTray);
+    const unlisten = [
+      listen("run-requested", runFromTray),
+      listen<UpdateInfo>("update-available", (e) => {
+        update = e.payload;
+        updateDismissed = false;
+      }),
+      listen("update-requested", async () => {
+        showHistory = false;
+        await checkForUpdate();
+        if (!update) showSettings = true;
+      }),
+      listen<{ downloaded: number; total: number | null }>("update-progress", (e) => {
+        const { downloaded, total } = e.payload;
+        downloadPercent = total ? Math.round((downloaded / total) * 100) : null;
+      }),
+    ];
     return () => {
-      unlisten.then((stop) => stop());
+      unlisten.forEach((u) => u.then((stop) => stop()));
       clearInterval(clock);
       observer.disconnect();
       termEl.removeEventListener("wheel", onTermWheel, { capture: true });
@@ -406,6 +455,21 @@
       <button onclick={() => revealItemInDir(logPath!)} title={logPath}>Show log</button>
     {/if}
   </header>
+  {#if update && !updateDismissed}
+    <div class="update">
+      Topgrade GUI {update.version} is available.
+      {#if installing}
+        {downloadPercent === null ? "Installing…" : `Downloading… ${downloadPercent}%`}
+      {:else}
+        <span class="actions">
+          <button class="primary" onclick={installUpdate} disabled={running} title={running ? "Wait for the run to finish" : ""}>
+            Install and restart
+          </button>
+          <button onclick={() => (updateDismissed = true)}>Later</button>
+        </span>
+      {/if}
+    </div>
+  {/if}
   {#if viewing}
     <div class="viewing">
       Viewing run from {formatDate(viewing.startedAt)}
@@ -438,7 +502,16 @@
       <HistoryList runs={history} {now} onopen={openRun} onclose={() => (showHistory = false)} />
     {/if}
     {#if showSettings && settings}
-      <SettingsPanel {settings} {version} onchange={updateSettings} onclose={() => (showSettings = false)} />
+      <SettingsPanel
+        {settings}
+        {version}
+        {update}
+        {updateMessage}
+        {checkingUpdate}
+        oncheckupdate={checkForUpdate}
+        oninstallupdate={installUpdate}
+        {installing}
+        onchange={updateSettings} onclose={() => (showSettings = false)} />
     {/if}
     <Sidebar {steps} {unmatched} {now} onselect={jumpTo} />
     <div class="terminal" bind:this={termEl}></div>
@@ -538,6 +611,22 @@
 
   button.active {
     background: #555;
+  }
+
+  .update {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: #1d3524;
+    color: #9fdcb0;
+    border-bottom: 1px solid #2f6140;
+  }
+
+  .update .actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
   }
 
   .banner {

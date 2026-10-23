@@ -19,6 +19,8 @@ pub struct Settings {
     pub assume_yes: bool,
     /// Terminal font size in px.
     pub font_size: u32,
+    /// Look for new releases in the background (every few hours).
+    pub auto_check_updates: bool,
 }
 
 impl Default for Settings {
@@ -29,6 +31,7 @@ impl Default for Settings {
             cleanup: false,
             assume_yes: false,
             font_size: 13,
+            auto_check_updates: true,
         }
     }
 }

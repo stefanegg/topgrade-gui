@@ -135,4 +135,11 @@ export interface Settings {
   cleanup: boolean;
   assumeYes: boolean;
   fontSize: number;
+  autoCheckUpdates: boolean;
+}
+
+/** updater.rs `UpdateInfo`. */
+export interface UpdateInfo {
+  version: string;
+  notes: string | null;
 }

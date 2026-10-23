@@ -5,6 +5,7 @@ mod parser;
 mod runner;
 mod settings;
 mod tray;
+mod updater;
 mod window_state;
 
 use std::time::Duration;
@@ -116,7 +117,9 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     // first release launch, and re-points it if the app moved).
     let _ = autostart::apply(app, settings.autostart);
     app.manage(AppState::new(data_dir, settings));
+    app.manage(updater::UpdateState::default());
     tray::setup(app)?;
+    updater::start_background_checks(app.clone());
 
     // A tray app starts hidden (window is `visible: false` in
     // tauri.conf.json); only the very first launch shows the window so a new
@@ -148,6 +151,7 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Runner::default())
         .setup(|app| setup(app.handle()))
         // Closing the window keeps the app (and reminders) running in the tray.
@@ -169,6 +173,8 @@ pub fn run() {
             list_runs,
             replay_run,
             app_version,
+            updater::check_for_update,
+            updater::install_update,
             get_settings,
             set_settings,
             replay_fixture

@@ -53,6 +53,12 @@ The app version is derived from git tags at build time (`src-tauri/build.rs`) an
 
 To release, add entries under `Unreleased` in `CHANGELOG.md`, then run `scripts/release.sh X.Y.Z` from a clean tree. It writes the version into `package.json`, `Cargo.toml`, `Cargo.lock` and `tauri.conf.json`, dates the changelog entry, commits and tags `vX.Y.Z`. Building that tag (`pnpm tauri build`) gives bundle file names and an in-app version that all read `X.Y.Z`. Publish with `git push --follow-tags`: pushing the tag starts `.github/workflows/release.yml`, which builds the Linux (AppImage, deb, rpm) and macOS (dmg) installers and attaches them to a GitHub Release with the changelog section as notes. To (re)build an existing tag, run the workflow manually with the tag name.
 
+## Auto-update
+
+The app checks `releases/latest/download/latest.json` on GitHub (first after 2 minutes, then every 6 hours; Settings can turn this off), shows a banner in the window and an "Install update …" tray item, and on confirmation downloads the update, verifies its signature against the public key in `tauri.conf.json`, installs it and restarts. AppImage and macOS builds are replaced in place; an RPM install is upgraded through `pkexec` (password prompt). Updates are refused while a topgrade run is active.
+
+Release builds are signed in CI with the `TAURI_SIGNING_PRIVATE_KEY` repository secret. The private key lives in `~/.tauri/topgrade-gui.key` on the maintainer's machine — keep a backup; without it installed apps can't be updated. Local `pnpm tauri build` runs need it too: `export TAURI_SIGNING_PRIVATE_KEY=~/.tauri/topgrade-gui.key TAURI_SIGNING_PRIVATE_KEY_PASSWORD=`.
+
 ## Data
 
 `~/Library/Application Support/dev.eggenschwiler.topgrade-gui/` (macOS) or `~/.local/share/dev.eggenschwiler.topgrade-gui/` (Linux): `settings.json` and `logs/` (raw log + JSON summary per run).

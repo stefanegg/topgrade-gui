@@ -13,6 +13,7 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::history::{self, RunSummary};
 use crate::settings::Settings;
+use crate::updater;
 use crate::window_state;
 
 /// Event asking the frontend to start a run with the saved default flags
@@ -50,10 +51,11 @@ impl AppState {
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let run = MenuItem::with_id(app, "run", "Run now", true, None::<&str>)?;
     let last_run = MenuItem::with_id(app, "last-run", "Last run: never", false, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", "Check for updates", true, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open Topgrade GUI", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&run, &last_run, &separator, &open, &quit])?;
+    let menu = Menu::with_items(app, &[&run, &last_run, &separator, &update, &open, &quit])?;
 
     // macOS: monochrome template image the system tints for light/dark menu
     // bars. Elsewhere (e.g. KDE) template images aren't supported, so use the
@@ -78,12 +80,17 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
                 show_window(app);
                 let _ = app.emit(RUN_REQUESTED, ());
             }
+            "update" => {
+                show_window(app);
+                let _ = app.emit(updater::UPDATE_REQUESTED, ());
+            }
             "open" => show_window(app),
             "quit" => app.exit(0),
             _ => {}
         })
         .build(app)?;
 
+    app.state::<updater::UpdateState>().set_tray_item(update);
     *app.state::<AppState>().last_run_item.lock().unwrap() = Some(last_run);
     refresh(app);
     start_reminder(app.clone());

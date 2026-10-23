@@ -1,15 +1,32 @@
 <script lang="ts">
   import changelogSource from "../../CHANGELOG.md?raw";
-  import type { Settings } from "./run";
+  import type { Settings, UpdateInfo } from "./run";
 
   interface Props {
     settings: Settings;
     version: string;
+    update: UpdateInfo | null;
+    updateMessage: string;
+    checkingUpdate: boolean;
+    installing: boolean;
+    oncheckupdate: () => void;
+    oninstallupdate: () => void;
     onchange: (patch: Partial<Settings>) => void;
     onclose: () => void;
   }
 
-  let { settings, version, onchange, onclose }: Props = $props();
+  let {
+    settings,
+    version,
+    update,
+    updateMessage,
+    checkingUpdate,
+    installing,
+    oncheckupdate,
+    oninstallupdate,
+    onchange,
+    onclose,
+  }: Props = $props();
 
   interface Release {
     title: string;
@@ -80,6 +97,21 @@
   <div class="field">
     <h3>About</h3>
     <p class="version">Version {version || "…"}</p>
+    <div class="inline">
+      <button onclick={oncheckupdate} disabled={checkingUpdate || installing}>Check for updates</button>
+      {#if update}
+        <button onclick={oninstallupdate} disabled={installing}>Install {update.version} and restart</button>
+      {/if}
+    </div>
+    {#if updateMessage}<p class="hint">{updateMessage}</p>{/if}
+    <label class="check">
+      <input
+        type="checkbox"
+        checked={settings.autoCheckUpdates}
+        onchange={(e) => onchange({ autoCheckUpdates: e.currentTarget.checked })}
+      />
+      Check for updates automatically
+    </label>
   </div>
   <div class="field changelog">
     <h3>Changelog</h3>

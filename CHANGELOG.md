@@ -7,6 +7,7 @@ The app shows this file in Settings.
 ## Unreleased
 
 ### Added
+- Auto-update: new releases are detected in the background (and via "Check for updates" in the tray menu and Settings), announced with a notification, and installed from the signed GitHub Release after confirmation. Can be switched off in Settings.
 - GitHub Actions workflow that builds installers and publishes a GitHub Release for every version tag.
 
 ## 0.2.0 - 2026-10-23
