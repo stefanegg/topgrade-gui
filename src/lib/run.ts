@@ -134,4 +134,5 @@ export interface Settings {
   autostart: boolean;
   cleanup: boolean;
   assumeYes: boolean;
+  fontSize: number;
 }

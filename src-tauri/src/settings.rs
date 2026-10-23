@@ -17,6 +17,8 @@ pub struct Settings {
     /// Default flags, also used by the tray's "Run now".
     pub cleanup: bool,
     pub assume_yes: bool,
+    /// Terminal font size in px.
+    pub font_size: u32,
 }
 
 impl Default for Settings {
@@ -26,6 +28,7 @@ impl Default for Settings {
             autostart: true,
             cleanup: false,
             assume_yes: false,
+            font_size: 13,
         }
     }
 }

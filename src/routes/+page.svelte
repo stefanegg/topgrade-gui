@@ -55,7 +55,33 @@
     if (settings) {
       cleanup = settings.cleanup;
       assumeYes = settings.assumeYes;
+      setFontSize(settings.fontSize, false);
     }
+  }
+
+  const MIN_FONT = 8;
+  const MAX_FONT = 32;
+  let saveFontTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function setFontSize(size: number, save = true) {
+    size = Math.min(MAX_FONT, Math.max(MIN_FONT, Math.round(size)));
+    if (term.options.fontSize !== size) {
+      term.options.fontSize = size;
+      fit.fit();
+    }
+    if (!save) return;
+    clearTimeout(saveFontTimer);
+    saveFontTimer = setTimeout(() => updateSettings({ fontSize: size }), 300);
+  }
+
+  /** Shift + wheel zooms the terminal font (like VS Code's Ctrl + wheel). */
+  function onTermWheel(e: WheelEvent) {
+    if (!e.shiftKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    // WebKit may turn shift + wheel into horizontal scrolling.
+    const delta = e.deltaY || e.deltaX;
+    if (delta) setFontSize((term.options.fontSize ?? 13) + (delta < 0 ? 1 : -1));
   }
 
   function updateSettings(patch: Partial<Settings>) {
@@ -282,6 +308,7 @@
     term.loadAddon(fit);
     term.open(termEl);
     fit.fit();
+    termEl.addEventListener("wheel", onTermWheel, { capture: true, passive: false });
 
     term.onData((data) => {
       if (!running || viewing) return;
@@ -303,6 +330,8 @@
       unlisten.then((stop) => stop());
       clearInterval(clock);
       observer.disconnect();
+      termEl.removeEventListener("wheel", onTermWheel, { capture: true });
+      clearTimeout(saveFontTimer);
       term.dispose();
     };
   });
