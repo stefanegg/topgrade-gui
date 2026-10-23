@@ -6,6 +6,8 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+## 0.2.0 - 2026-10-23
+
 ### Added
 - Zoom the terminal font with Shift + mouse wheel; the size is remembered.
 - Version (from git tags) and changelog in Settings.
