@@ -125,6 +125,12 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Wayland doesn't let clients read or set their window position, so
+    // remembering it needs XWayland. Respect an explicit GDK_BACKEND.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WAYLAND_DISPLAY").is_some() && std::env::var_os("GDK_BACKEND").is_none() {
+        std::env::set_var("GDK_BACKEND", "x11");
+    }
     let builder = tauri::Builder::default();
     // macOS uses SMAppService directly (see autostart.rs).
     #[cfg(not(target_os = "macos"))]

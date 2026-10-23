@@ -51,4 +51,4 @@ Dev builds have a "Replay fixture…" menu that plays the logs in `src-tauri/tes
 
 `~/Library/Application Support/dev.eggenschwiler.topgrade-gui/` (macOS) or `~/.local/share/dev.eggenschwiler.topgrade-gui/` (Linux): `settings.json` and `logs/` (raw log + JSON summary per run).
 
-The window reopens with its last size and position (`window.json`), unless the monitor setup changed since. On Wayland only the size is restored, since apps can't place their own windows there; to keep the position too, add a KDE window rule (System Settings → Apps & Windows → Window Management → Window Rules, with Position set to Remember).
+The window reopens with its last size and position (`window.json`), unless the monitor setup changed since. On Linux the app runs via XWayland so it can place its window (set `GDK_BACKEND` to override).

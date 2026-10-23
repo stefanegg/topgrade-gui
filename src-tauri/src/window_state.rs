@@ -2,9 +2,6 @@
 //! data dir). Saved geometry is only restored while the monitor layout is
 //! the same as when it was saved; after a resolution or monitor change the
 //! window keeps its default size and placement.
-//!
-//! Native Wayland doesn't let clients read or set their window position, so
-//! there only the size is restored and placement is left to the compositor.
 
 use std::fs;
 use std::path::Path;
@@ -23,15 +20,14 @@ pub struct WindowState {
     width: u32,
     height: u32,
     maximized: bool,
-    /// Monitor layout at save time. Names aren't compared: the same screen
-    /// can be named differently (e.g. connector vs. model name between X11
-    /// and Wayland).
+    /// Monitor layout at save time.
     monitors: Vec<MonitorInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MonitorInfo {
+    name: Option<String>,
     x: i32,
     y: i32,
     width: u32,
@@ -42,6 +38,7 @@ struct MonitorInfo {
 impl From<&Monitor> for MonitorInfo {
     fn from(m: &Monitor) -> Self {
         Self {
+            name: m.name().cloned(),
             x: m.position().x,
             y: m.position().y,
             width: m.size().width,
@@ -59,7 +56,7 @@ fn monitors<R: Runtime>(window: &WebviewWindow<R>) -> Vec<MonitorInfo> {
         .map(MonitorInfo::from)
         .collect();
     // Enumeration order isn't guaranteed to be stable.
-    list.sort_by_key(|m| (m.x, m.y));
+    list.sort_by(|a, b| (a.x, a.y, &a.name).cmp(&(b.x, b.y, &b.name)));
     list
 }
 
@@ -117,21 +114,10 @@ pub fn restore<R: Runtime>(dir: &Path, window: &WebviewWindow<R>) {
         return;
     }
     let _ = window.set_size(PhysicalSize::new(state.width, state.height));
-    if can_position() {
-        let _ = window.set_position(PhysicalPosition::new(state.x, state.y));
-    }
+    let _ = window.set_position(PhysicalPosition::new(state.x, state.y));
     if state.maximized {
         let _ = window.maximize();
     }
-}
-
-/// False on native Wayland (GTK picks Wayland whenever `WAYLAND_DISPLAY` is
-/// set, unless `GDK_BACKEND` says otherwise).
-fn can_position() -> bool {
-    if !cfg!(target_os = "linux") || std::env::var_os("WAYLAND_DISPLAY").is_none() {
-        return true;
-    }
-    std::env::var("GDK_BACKEND").is_ok_and(|b| b.split(',').next() == Some("x11"))
 }
 
 fn load(dir: &Path) -> Option<WindowState> {
@@ -151,6 +137,6 @@ mod tests {
             (state.x, state.y, state.width, state.height),
             (10, 20, 1100, 750)
         );
-        assert_eq!(state.monitors[0].width, 2560);
+        assert_eq!(state.monitors[0].name.as_deref(), Some("DP-1"));
     }
 }
