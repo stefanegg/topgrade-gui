@@ -24,13 +24,15 @@ if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
   exit 1
 fi
 
-# First `"version"` / `version =` line only (never a dependency's).
-sed -i.bak -E '0,/^  "version": ".*"/s//  "version": "'"$version"'"/' package.json src-tauri/tauri.conf.json
-sed -i.bak -E '0,/^version = ".*"/s//version = "'"$version"'"/' src-tauri/Cargo.toml
-rm -f package.json.bak src-tauri/tauri.conf.json.bak src-tauri/Cargo.toml.bak
+# First `"version"` / `version =` line only (never a dependency's). Perl
+# rather than sed so this runs the same on macOS and Linux.
+export version date="$(date +%F)"
+for f in package.json src-tauri/tauri.conf.json; do
+  perl -0pi -e 's/^  "version": ".*?"/  "version": "$ENV{version}"/m' "$f"
+done
+perl -0pi -e 's/^version = ".*?"/version = "$ENV{version}"/m' src-tauri/Cargo.toml
 
-sed -i.bak "s/^## Unreleased\$/## Unreleased\n\n## $version - $(date +%F)/" CHANGELOG.md
-rm -f CHANGELOG.md.bak
+perl -0pi -e 's/^## Unreleased$/## Unreleased\n\n## $ENV{version} - $ENV{date}/m' CHANGELOG.md
 
 # Refresh the lockfile's own package entry.
 (cd src-tauri && cargo update --offline -p topgrade-gui >/dev/null)
