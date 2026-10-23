@@ -19,7 +19,6 @@ use tray::AppState;
 
 /// Passed by the Linux autostart entry; the app starts hidden anyway, but
 /// this keeps login launches identifiable.
-#[cfg(not(target_os = "macos"))]
 const HIDDEN_ARG: &str = "--hidden";
 
 #[tauri::command]
