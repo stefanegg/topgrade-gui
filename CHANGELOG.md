@@ -1,0 +1,21 @@
+# Changelog
+
+All notable changes to this project are documented here, following
+[Keep a Changelog](https://keepachangelog.com/) and [Semantic Versioning](https://semver.org/).
+The app shows this file in Settings.
+
+## Unreleased
+
+### Added
+- Zoom the terminal font with Shift + mouse wheel; the size is remembered.
+- Version (from git tags) and changelog in Settings.
+
+## 0.1.0 - 2026-10-09
+
+### Added
+- Run topgrade in a PTY with live xterm.js output and interactive prompts.
+- Parse output into steps, summary results and per-step updates.
+- Save raw logs and run summaries; history view.
+- Tray icon, overdue-update reminder, start at login and settings.
+- macOS app packaging (login item via SMAppService).
+- Remember window size and position across launches.

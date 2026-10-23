@@ -47,6 +47,12 @@ pnpm tauri dev
 
 Dev builds have a "Replay fixture…" menu that plays the logs in `src-tauri/tests/fixtures/` through the UI. Tests: `cd src-tauri && cargo test`.
 
+## Versioning and releases
+
+The app version is derived from git tags at build time (`src-tauri/build.rs`) and shown in Settings: a tagged commit `v1.2.3` is `1.2.3`; later commits are `1.2.3-dev.N+gSHA`; uncommitted changes add `+dirty`. Without any `v*` tag it falls back to the version in `Cargo.toml`.
+
+To release, add entries under `Unreleased` in `CHANGELOG.md`, then run `scripts/release.sh X.Y.Z` from a clean tree. It writes the version into `package.json`, `Cargo.toml`, `Cargo.lock` and `tauri.conf.json`, dates the changelog entry, commits and tags `vX.Y.Z`. Building that tag (`pnpm tauri build`) gives bundle file names and an in-app version that all read `X.Y.Z`. Publish with `git push --follow-tags`.
+
 ## Data
 
 `~/Library/Application Support/dev.eggenschwiler.topgrade-gui/` (macOS) or `~/.local/share/dev.eggenschwiler.topgrade-gui/` (Linux): `settings.json` and `logs/` (raw log + JSON summary per run).

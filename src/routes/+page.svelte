@@ -49,6 +49,7 @@
 
   let settings = $state<Settings | null>(null);
   let showSettings = $state(false);
+  let version = $state("");
 
   async function loadSettings() {
     settings = await invoke<Settings>("get_settings").catch(() => null);
@@ -325,6 +326,7 @@
     const clock = setInterval(() => (now = Date.now()), 1000);
     loadHistory();
     loadSettings();
+    invoke<string>("app_version").then((v) => (version = v)).catch(() => {});
     const unlisten = listen("run-requested", runFromTray);
     return () => {
       unlisten.then((stop) => stop());
@@ -436,7 +438,7 @@
       <HistoryList runs={history} {now} onopen={openRun} onclose={() => (showHistory = false)} />
     {/if}
     {#if showSettings && settings}
-      <SettingsPanel {settings} onchange={updateSettings} onclose={() => (showSettings = false)} />
+      <SettingsPanel {settings} {version} onchange={updateSettings} onclose={() => (showSettings = false)} />
     {/if}
     <Sidebar {steps} {unmatched} {now} onselect={jumpTo} />
     <div class="terminal" bind:this={termEl}></div>

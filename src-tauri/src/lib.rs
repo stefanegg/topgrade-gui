@@ -67,6 +67,12 @@ fn stop_run(runner: State<Runner>) -> Result<(), String> {
     runner.stop()
 }
 
+/// Semver derived from git tags at build time (see build.rs).
+#[tauri::command]
+fn app_version() -> &'static str {
+    env!("APP_VERSION")
+}
+
 #[tauri::command]
 fn get_settings(state: State<AppState>) -> Settings {
     state.settings.lock().unwrap().clone()
@@ -162,6 +168,7 @@ pub fn run() {
             stop_run,
             list_runs,
             replay_run,
+            app_version,
             get_settings,
             set_settings,
             replay_fixture

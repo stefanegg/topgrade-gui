@@ -1,13 +1,40 @@
 <script lang="ts">
+  import changelogSource from "../../CHANGELOG.md?raw";
   import type { Settings } from "./run";
 
   interface Props {
     settings: Settings;
+    version: string;
     onchange: (patch: Partial<Settings>) => void;
     onclose: () => void;
   }
 
-  let { settings, onchange, onclose }: Props = $props();
+  let { settings, version, onchange, onclose }: Props = $props();
+
+  interface Release {
+    title: string;
+    groups: { name: string; items: string[] }[];
+  }
+
+  /** Minimal Keep a Changelog reader: `## release`, `### group`, `- item`. */
+  function parseChangelog(source: string): Release[] {
+    const releases: Release[] = [];
+    for (const raw of source.split("\n")) {
+      const line = raw.trim();
+      if (line.startsWith("## ")) {
+        releases.push({ title: line.slice(3), groups: [] });
+      } else if (line.startsWith("### ") && releases.length) {
+        releases.at(-1)!.groups.push({ name: line.slice(4), items: [] });
+      } else if (line.startsWith("- ") && releases.length) {
+        const release = releases.at(-1)!;
+        if (!release.groups.length) release.groups.push({ name: "", items: [] });
+        release.groups.at(-1)!.items.push(line.slice(2));
+      }
+    }
+    return releases;
+  }
+
+  const releases = parseChangelog(changelogSource);
 </script>
 
 <section>
@@ -50,6 +77,22 @@
   <p class="hint">
     The --cleanup and -y toggles in the toolbar are saved too, and are used by Run now in the tray.
   </p>
+  <div class="field">
+    <h3>About</h3>
+    <p class="version">Version {version || "…"}</p>
+  </div>
+  <div class="field changelog">
+    <h3>Changelog</h3>
+    {#each releases as release}
+      <h4>{release.title}</h4>
+      {#each release.groups as group}
+        {#if group.name}<h5>{group.name}</h5>{/if}
+        <ul>
+          {#each group.items as item}<li>{item}</li>{/each}
+        </ul>
+      {/each}
+    {/each}
+  </div>
 </section>
 
 <style>
@@ -111,6 +154,36 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  h3 {
+    margin: 12px 0 0;
+    font-size: 13px;
+  }
+
+  h4 {
+    margin: 12px 0 0;
+    font-size: 13px;
+  }
+
+  h5 {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #aaa;
+  }
+
+  .version {
+    margin: 6px 0 0;
+    font-family: Menlo, monospace;
+  }
+
+  .changelog {
+    padding-bottom: 16px;
+  }
+
+  ul {
+    margin: 4px 0 0;
+    padding-left: 20px;
   }
 
   .hint {
