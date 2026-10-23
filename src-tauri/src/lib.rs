@@ -140,7 +140,14 @@ pub fn run() {
     if std::env::var_os("WAYLAND_DISPLAY").is_some() && std::env::var_os("GDK_BACKEND").is_none() {
         std::env::set_var("GDK_BACKEND", "x11");
     }
-    let builder = tauri::Builder::default();
+    // Must be the first plugin. A second launch just brings up the running
+    // window (unless it's the hidden login-item start).
+    let builder =
+        tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if !args.iter().any(|a| a == HIDDEN_ARG) {
+                tray::show_window(app);
+            }
+        }));
     // macOS uses SMAppService directly (see autostart.rs).
     #[cfg(not(target_os = "macos"))]
     let builder = builder.plugin(
