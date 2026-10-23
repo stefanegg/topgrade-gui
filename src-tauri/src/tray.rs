@@ -13,6 +13,7 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::history::{self, RunSummary};
 use crate::settings::Settings;
+use crate::window_state;
 
 /// Event asking the frontend to start a run with the saved default flags
 /// (the frontend owns the terminal size).
@@ -93,6 +94,9 @@ pub fn show_window(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
     if let Some(window) = app.get_webview_window("main") {
+        if !window.is_visible().unwrap_or(true) {
+            window_state::restore(&app.state::<AppState>().data_dir, &window);
+        }
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
@@ -102,10 +106,20 @@ pub fn show_window(app: &AppHandle) {
 /// Hides to the tray; on macOS also drops the Dock icon while hidden.
 pub fn hide_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        save_window_state(app);
         let _ = window.hide();
     }
     #[cfg(target_os = "macos")]
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+}
+
+/// Remembers the window's geometry while it's visible.
+pub fn save_window_state(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_visible().unwrap_or(false) {
+            window_state::save(&app.state::<AppState>().data_dir, &window);
+        }
+    }
 }
 
 /// Updates "Last run: …" in the tray menu; call after a run finishes.

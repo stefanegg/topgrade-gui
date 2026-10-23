@@ -5,6 +5,7 @@ mod parser;
 mod runner;
 mod settings;
 mod tray;
+mod window_state;
 
 use std::time::Duration;
 
@@ -138,11 +139,15 @@ pub fn run() {
         .manage(Runner::default())
         .setup(|app| setup(app.handle()))
         // Closing the window keeps the app (and reminders) running in the tray.
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 tray::hide_window(window.app_handle());
             }
+            // Also save on blur so geometry survives a logout or crash
+            // while the window is open.
+            WindowEvent::Focused(false) => tray::save_window_state(window.app_handle()),
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             start_run,
@@ -158,6 +163,7 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| match event {
+            tauri::RunEvent::ExitRequested { .. } => tray::save_window_state(app),
             tauri::RunEvent::Exit => app.state::<Runner>().kill(),
             // macOS: clicking the Dock icon while the window is hidden.
             #[cfg(target_os = "macos")]
