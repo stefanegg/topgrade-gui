@@ -155,6 +155,11 @@ pub async fn install_update(
         )
         .await
         .map_err(|e| e.to_string())?;
+    // A run may have started during the download; don't kill it. The update
+    // is installed and takes effect on the next launch.
+    if runner.is_running() {
+        return Ok(());
+    }
     tray::save_window_state(&app);
     runner.kill();
     app.restart()

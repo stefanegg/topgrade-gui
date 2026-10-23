@@ -78,6 +78,10 @@
     downloadPercent = null;
     try {
       await invoke("install_update"); // restarts the app on success
+      // Returns only if a run started during the download.
+      installing = false;
+      updateMessage = "Update installed. It takes effect when the app restarts after this run.";
+      status = updateMessage;
     } catch (err) {
       installing = false;
       updateMessage = `Update failed: ${err}`;

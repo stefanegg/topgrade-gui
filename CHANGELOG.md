@@ -6,6 +6,12 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+### Changed
+- The window now runs with a strict Content Security Policy.
+
+### Fixed
+- Installing an update no longer stops a topgrade run that was started while the update was downloading; the update then takes effect on the next launch.
+
 ## 0.4.0 - 2026-10-23
 
 ### Changed
