@@ -23,7 +23,11 @@ Download the latest installer from the [Releases](https://github.com/stefanegg/t
 - **Debian / Ubuntu:** `sudo apt install ./Topgrade.GUI_*.deb`
 - **Other Linux:** make the `.AppImage` executable and run it
 - On GNOME, the tray icon needs the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/).
-- **macOS (Apple Silicon):** open the `.dmg` and copy the app to `/Applications` before the first launch (the login item points to the app's location). The build is unsigned, so macOS may ask you to confirm the first start in System Settings → Privacy & Security.
+- **macOS (Apple Silicon):** open the `.dmg` and copy the app to `/Applications` before the first launch (the login item points to the app's location). The build is not notarized by Apple, so Gatekeeper blocks the first start. Either right-click the app → Open → Open, or allow it in System Settings → Privacy & Security → "Open Anyway". If macOS says the app is damaged, remove the download quarantine flag:
+
+  ```bash
+  xattr -dr com.apple.quarantine "/Applications/Topgrade GUI.app"
+  ```
 
 The app then keeps itself up to date, see [Auto-update](#auto-update).
 

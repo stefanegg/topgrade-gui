@@ -6,6 +6,9 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+### Fixed
+- macOS builds are ad-hoc code signed so the bundle is sealed; README explains how to open the unnotarized app.
+
 ## 0.4.5 - 2026-10-24
 
 ### Added
