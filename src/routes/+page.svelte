@@ -25,6 +25,7 @@
     type PromptKind,
     type RunSummary,
     type Settings,
+    type Sources,
     type Step,
     type StreamEvent,
     type UpdateInfo,
@@ -67,6 +68,10 @@
   let viewing = $state<RunSummary | null>(null);
   let lastRun = $derived(history.find((r) => !isDryRun(r)));
   let lastUpdate = $derived(history.find((r) => !isDryRun(r) && isFinished(r)));
+
+  let sources = $state<Sources | null>(null);
+  let detecting = $state(false);
+  let sourcesError = $state<string | null>(null);
 
   let settings = $state<Settings | null>(null);
   let version = $state("");
@@ -254,6 +259,28 @@
     navigate("overview");
     dryRun = false;
     run();
+  }
+
+  /** Re-detects with a background dry run when the saved list is older than this. */
+  const SOURCES_MAX_AGE = 24 * 60 * 60 * 1000;
+
+  async function loadSources() {
+    sources = await invoke<Sources | null>("get_sources").catch(() => null);
+    if (!sources || Date.now() - new Date(sources.detectedAt).getTime() > SOURCES_MAX_AGE) {
+      detectSources();
+    }
+  }
+
+  async function detectSources() {
+    detecting = true;
+    sourcesError = null;
+    try {
+      sources = await invoke<Sources>("detect_sources");
+    } catch (err) {
+      sourcesError = String(err);
+    } finally {
+      detecting = false;
+    }
   }
 
   async function loadHistory() {
@@ -524,6 +551,7 @@
     const clock = setInterval(() => (now = Date.now()), 1000);
     loadHistory();
     loadSettings();
+    loadSources();
     invoke<string>("app_version").then((v) => (version = v)).catch(() => {});
     const unlisten = [
       listen("run-requested", runFromTray),
@@ -640,6 +668,10 @@
         {lastRun}
         {lastUpdate}
         remindAfterDays={settings?.remindAfterDays ?? 7}
+        {sources}
+        {detecting}
+        {sourcesError}
+        ondetect={detectSources}
         {now}
         {cleanup}
         {assumeYes}

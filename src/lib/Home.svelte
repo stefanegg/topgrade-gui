@@ -1,6 +1,13 @@
 <script lang="ts">
-  import { formatAgo, formatDate, isFinished, summaryTotals, type RunSummary } from "./run";
-  import { collectChanges, highlightNames, joinNames } from "./changes";
+  import {
+    formatAgo,
+    formatDate,
+    isFinished,
+    summaryTotals,
+    type RunSummary,
+    type Sources,
+  } from "./run";
+  import { collectChanges, highlightNames, joinNames, sourceName } from "./changes";
 
   interface Props {
     /** Newest real (non-dry) run, finished or not. */
@@ -8,6 +15,11 @@
     /** Newest real run that finished; the reminder counts from this one. */
     lastUpdate: RunSummary | undefined;
     remindAfterDays: number;
+    /** From the background dry run; null until the first one finished. */
+    sources: Sources | null;
+    detecting: boolean;
+    sourcesError: string | null;
+    ondetect: () => void;
     now: number;
     cleanup: boolean;
     assumeYes: boolean;
@@ -16,7 +28,7 @@
     onopenrun: (run: RunSummary) => void;
   }
 
-  let { lastRun, lastUpdate, remindAfterDays, now, cleanup, assumeYes, onoptions, onrun, onopenrun }: Props =
+  let { lastRun, lastUpdate, remindAfterDays, sources, detecting, sourcesError, ondetect, now, cleanup, assumeYes, onoptions, onrun, onopenrun }: Props =
     $props();
 
   const DAY = 24 * 60 * 60 * 1000;
@@ -35,6 +47,19 @@
       : [],
   );
   let lastTotals = $derived(lastRun ? summaryTotals(lastRun) : null);
+
+  /** Items each top-level step updated in the last run; a nested run (e.g.
+   *  inside Toolbx) counts toward the top-level step before it. */
+  let lastCounts = $derived.by(() => {
+    const counts = new Map<string, number>();
+    let parent: string | null = null;
+    for (const step of lastRun?.steps ?? []) {
+      if (step.group === null) parent = step.name;
+      if (parent === null) continue;
+      counts.set(parent, (counts.get(parent) ?? 0) + (step.updates?.items.length ?? 0));
+    }
+    return counts;
+  });
 
   let lastSummary = $derived.by(() => {
     const names = highlightNames(lastChanges);
@@ -133,6 +158,41 @@
         </button>
       </div>
     {/if}
+
+    <section class="card sources" aria-labelledby="sources-title">
+      <div class="sources-head">
+        <h2 id="sources-title">What topgrade updates on this computer</h2>
+        {#if sources}
+          <span class="muted small">
+            {sources.names.length} sources · checked {formatAgo(sources.detectedAt, now)}
+          </span>
+        {/if}
+        <button class="link-button small" onclick={ondetect} disabled={detecting}>
+          {detecting ? "Checking…" : sources ? "Check again" : "Check now"}
+        </button>
+      </div>
+      {#if sources}
+        <ul>
+          {#each sources.names as name}
+            {@const count = lastCounts.get(name) ?? 0}
+            <li>
+              <span class="source-name" title={sourceName(name)}>{sourceName(name)}</span>
+              {#if count > 0}
+                <span class="count" title="Updated in the last run">{count}</span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+        <p class="muted small">
+          Found with a dry run of topgrade, which only looks and changes nothing. Numbers show what each one updated in
+          the last run.
+        </p>
+      {:else if detecting}
+        <p class="muted">Asking topgrade what it can update here…</p>
+      {:else if sourcesError}
+        <p class="muted">Couldn't find out: {sourcesError}</p>
+      {/if}
+    </section>
   </section>
 </div>
 
@@ -260,6 +320,68 @@
 
   .failed {
     color: var(--danger);
+  }
+
+  .sources {
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .sources-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 12px;
+  }
+
+  .sources-head h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    margin-right: auto;
+  }
+
+  .sources ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 6px 16px;
+  }
+
+  .sources li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .source-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .count {
+    padding: 0 7px;
+    border-radius: 9px;
+    background: var(--accent-soft);
+    color: var(--link);
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .link-button:disabled {
+    color: var(--muted);
+    text-decoration: none;
+    cursor: default;
   }
 
 </style>

@@ -32,6 +32,7 @@ export interface StepUpdates {
 }
 
 const SOURCE_NAMES: Record<string, string> = {
+  "Self update": "topgrade itself",
   "System update": "System packages",
   Brew: "Homebrew",
   "Brew - Cask": "Homebrew apps",
