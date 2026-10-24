@@ -6,6 +6,9 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+### Fixed
+- Homebrew's upgrade question is now really recognised: Homebrew ends the question with a line break before waiting for the answer, which 0.6.1 still missed, so the run seemed to hang without a notification.
+
 ## 0.6.1 - 2026-10-24
 
 ### Fixed

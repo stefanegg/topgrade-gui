@@ -95,6 +95,9 @@ struct State {
     pending_cr: bool,
     /// Prompt already reported for the current line.
     prompt_reported: bool,
+    /// The last finished line was a yes/no confirmation not yet reported;
+    /// Homebrew prints its question with a newline before waiting.
+    confirmation_line_ended: bool,
     /// Step started from the title whose separator line is still expected.
     awaiting_header: Option<(Option<String>, String)>,
     steps: Vec<StepInfo>,
@@ -197,6 +200,8 @@ impl State {
 
     fn on_line(&mut self) {
         let raw = std::mem::take(&mut self.line);
+        self.confirmation_line_ended =
+            !self.prompt_reported && is_yes_no_confirmation(raw.trim_end());
         self.prompt_reported = false;
         self.pending_cr = false;
         let line = raw.trim();
@@ -297,7 +302,10 @@ impl State {
         let line = self.line.trim_end();
         let prompt = if line.ends_with("(y)es/(N)o/(s)hell/(q)uit") {
             PromptKind::Retry
-        } else if line.ends_with("(Y)es/(N)o") || is_yes_no_confirmation(line) {
+        } else if line.ends_with("(Y)es/(N)o")
+            || is_yes_no_confirmation(line)
+            || (line.is_empty() && self.confirmation_line_ended)
+        {
             PromptKind::YesNo
         } else if line.to_lowercase().ends_with("password:")
             || (line.starts_with("[sudo]") && line.ends_with(':'))
@@ -703,6 +711,33 @@ mod tests {
         }
         // Mentioning the choice mid-line isn't a prompt.
         assert!(Parser::default().feed(b"Answer [y/n] below").is_empty());
+    }
+
+    #[test]
+    fn homebrew_confirmation_ending_in_newline_detected() {
+        let prompt = ParseEvent::Prompt {
+            prompt: PromptKind::YesNo,
+        };
+        let question =
+            b"\x1b[34m==>\x1b[0m \x1b[1mDo you want to proceed with the upgrade? [y/n]\x1b[0m\r\n";
+        let mut parser = Parser::default();
+        parser.feed(b"==> Would upgrade 2 outdated packages\r\n");
+        let events: Vec<_> = parser.feed(question).into_iter().map(|(_, e)| e).collect();
+        assert_eq!(events, [prompt.clone()]);
+        // Not reported again while waiting.
+        assert!(parser.feed(b"").is_empty());
+
+        // Question and its newline in separate reads: reported once.
+        let mut parser = Parser::default();
+        let (text, newline) = question.split_at(question.len() - 2);
+        assert_eq!(parser.feed(text).len(), 1);
+        assert!(parser.feed(newline).is_empty());
+
+        // Output carrying on after the question isn't a wait.
+        let mut parser = Parser::default();
+        let mut input = question.to_vec();
+        input.extend_from_slice(b"==> Upgrading certifi\r\n");
+        assert!(parser.feed(&input).is_empty());
     }
 
     #[test]
