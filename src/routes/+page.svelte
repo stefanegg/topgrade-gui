@@ -208,15 +208,29 @@
     if (canGoBack) closeRun();
   }
 
+  let stopDialog: HTMLDialogElement;
+
+  /** Escape during a live run asks before stopping it. */
+  function confirmStop() {
+    if (!stopDialog.open) stopDialog.showModal();
+  }
+
   /** Escape, mouse back button, Alt+Left, and Cmd+[ on macOS. */
   function onBackGesture(e: MouseEvent | KeyboardEvent) {
     let back: boolean;
     if (e instanceof MouseEvent) {
       back = e.button === 3;
     } else if (e.key === "Escape") {
-      // A search box with text clears itself first. (During a run Escape
-      // reaches the terminal untouched: there is nothing to go back to.)
       const target = e.target;
+      // The open dialog handles its own Escape (Keep running); typing in the
+      // terminal sends Escape to topgrade.
+      if (stopDialog.open || (target instanceof Node && termEl.contains(target))) return;
+      if (running && !viewing && !stopping) {
+        e.preventDefault();
+        confirmStop();
+        return;
+      }
+      // A search box with text clears itself first.
       back = !(target instanceof HTMLInputElement && target.type === "search" && target.value !== "");
     } else {
       back = (e.altKey && e.key === "ArrowLeft") || (isMac && e.metaKey && e.key === "[");
@@ -327,6 +341,7 @@
           break;
         }
         runEndedAt = Date.now();
+        if (stopDialog.open) stopDialog.close();
         if (e.kind === "error") problem = `The run failed: ${e.message}`;
         else if (stopping) problem = "You stopped the run before it finished.";
         else if (e.code !== 0) problem = `The run ended with exit code ${e.code}.`;
@@ -676,6 +691,23 @@
     {/if}
   </main>
 
+  <dialog class="card confirm" bind:this={stopDialog} aria-labelledby="stop-title">
+    <h2 id="stop-title">Stop this {runIsDry ? "preview" : "update"}?</h2>
+    <p class="muted">
+      {#if runIsDry}
+        Nothing has been changed, so stopping is safe.
+      {:else}
+        Steps that haven't run yet will be skipped, and the one running now is interrupted, which can leave a
+        package manager mid-way. You can run the update again afterwards.
+      {/if}
+    </p>
+    <form method="dialog" class="confirm-actions">
+      <!-- svelte-ignore a11y_autofocus -->
+      <button class="btn" value="keep" autofocus>Keep running</button>
+      <button class="btn danger" value="stop" onclick={() => stop()}>Stop</button>
+    </form>
+  </dialog>
+
   <section class="drawer" class:hidden={view !== "overview" && !viewing} aria-label="Terminal">
     <div class="drawer-bar">
       <button class="drawer-toggle" aria-expanded={terminalOpen} onclick={() => setTerminalOpen(!terminalOpen)}>
@@ -817,6 +849,46 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+  }
+
+  .confirm {
+    max-width: 420px;
+    padding: 24px;
+    color: var(--text);
+  }
+
+  .confirm::backdrop {
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  .confirm h2 {
+    margin: 0 0 8px;
+    font-size: 17px;
+    font-weight: 600;
+  }
+
+  .confirm p {
+    margin: 0;
+    line-height: 1.45;
+  }
+
+  .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+  }
+
+  .btn.danger {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: var(--danger-fg);
+    font-weight: 600;
+  }
+
+  .btn.danger:hover:not(:disabled) {
+    background: var(--danger);
+    filter: brightness(0.92);
   }
 
   .drawer {

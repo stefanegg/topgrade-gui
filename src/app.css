@@ -24,6 +24,7 @@
   --danger: #cf222e;
   --danger-soft: #ffebe9;
   --danger-border: #f5b5b0;
+  --danger-fg: #ffffff;
   --chip-on-bg: #1f2328;
   --chip-on-fg: #ffffff;
   --track: #e5e9ee;
@@ -56,6 +57,7 @@
     --danger: #f47067;
     --danger-soft: #3a2222;
     --danger-border: #6b3030;
+    --danger-fg: #1a0b0a;
     --chip-on-bg: #e6edf3;
     --chip-on-fg: #0f1214;
     --track: #2d333b;
@@ -86,6 +88,7 @@
   --danger: #f47067;
   --danger-soft: #3a2222;
   --danger-border: #6b3030;
+  --danger-fg: #1a0b0a;
   --chip-on-bg: #e6edf3;
   --chip-on-fg: #0f1214;
   --track: #2d333b;
