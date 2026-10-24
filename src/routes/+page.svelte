@@ -253,7 +253,7 @@
     }
   }
 
-  /** Tray "Run now": start with the saved flags unless a run is active. */
+  /** Tray "Update everything": start with the saved flags unless a run is active. */
   function runFromTray() {
     if (running) return;
     navigate("overview");

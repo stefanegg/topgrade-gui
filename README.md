@@ -10,7 +10,7 @@ A desktop wrapper for [topgrade](https://github.com/topgrade-rs/topgrade) (Tauri
 - Asks for sudo passwords in the app, and says when a restart is needed
 - Light, dark or system theme
 - Keeps the last 12 runs with their logs and summaries (History)
-- Lives in the tray: Run now, last run, and a reminder when an update is overdue
+- Lives in the tray: last update, Update everything, and a reminder when an update is overdue
 - Zoom the terminal font with Shift + mouse wheel (remembered)
 - Updates itself from signed GitHub Releases (asks first)
 
@@ -82,7 +82,7 @@ To release, add entries under `Unreleased` in `CHANGELOG.md`, then run `scripts/
 
 ## Auto-update
 
-The app checks `releases/latest/download/latest.json` on GitHub (first after 2 minutes, then every 6 hours; Settings can turn this off), shows a banner in the window and an "Install update …" tray item, and on confirmation downloads the update, verifies its signature against the public key in `tauri.conf.json`, installs it and restarts. AppImage and macOS builds are replaced in place; RPM and deb installs are upgraded through `pkexec` (password prompt). Updates are refused while a topgrade run is active.
+The app checks `releases/latest/download/latest.json` on GitHub (first after 2 minutes, then every 6 hours; Settings can turn this off), shows a banner in the window and an "Install Topgrade GUI …" tray item, and on confirmation downloads the update, verifies its signature against the public key in `tauri.conf.json`, installs it and restarts. AppImage and macOS builds are replaced in place; RPM and deb installs are upgraded through `pkexec` (password prompt). Updates are refused while a topgrade run is active.
 
 Release builds are signed in CI with the `TAURI_SIGNING_PRIVATE_KEY` repository secret. The private key lives in `~/.tauri/topgrade-gui.key` on the maintainer's machine — keep a backup; without it installed apps can't be updated. Local `pnpm build:linux` / `pnpm build:mac` runs need it too (they create update artifacts): `export TAURI_SIGNING_PRIVATE_KEY=~/.tauri/topgrade-gui.key TAURI_SIGNING_PRIVATE_KEY_PASSWORD=`.
 

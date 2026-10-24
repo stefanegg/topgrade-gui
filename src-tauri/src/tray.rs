@@ -22,6 +22,10 @@ use crate::window_state;
 /// (the frontend owns the terminal size).
 pub const RUN_REQUESTED: &str = "run-requested";
 
+/// Labels of the run item; it opens the window instead while a run is active.
+const RUN_TEXT: &str = "Update everything";
+const RUNNING_TEXT: &str = "Show progress";
+
 const FIRST_CHECK: Duration = Duration::from_secs(60);
 const CHECK_INTERVAL: Duration = Duration::from_secs(60 * 60);
 /// Don't repeat the reminder more often than this.
@@ -32,6 +36,7 @@ pub struct AppState {
     pub data_dir: PathBuf,
     pub settings: Mutex<Settings>,
     last_run_item: Mutex<Option<MenuItem<Wry>>>,
+    run_item: Mutex<Option<MenuItem<Wry>>>,
     last_notified: Mutex<Option<Instant>>,
 }
 
@@ -41,6 +46,7 @@ impl AppState {
             data_dir,
             settings: Mutex::new(settings),
             last_run_item: Mutex::new(None),
+            run_item: Mutex::new(None),
             last_notified: Mutex::new(None),
         }
     }
@@ -51,13 +57,25 @@ impl AppState {
 }
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
-    let run = MenuItem::with_id(app, "run", "Run now", true, None::<&str>)?;
+    // Status first, then the everyday actions; the app's own updates and
+    // Quit sit apart below.
     let last_run = MenuItem::with_id(app, "last-run", "Last update: never", false, None::<&str>)?;
-    let update = MenuItem::with_id(app, "update", "Check for updates", true, None::<&str>)?;
+    let run = MenuItem::with_id(app, "run", RUN_TEXT, true, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open Topgrade GUI", true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", updater::CHECK_TEXT, true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&run, &last_run, &separator, &update, &open, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &last_run,
+            &run,
+            &open,
+            &PredefinedMenuItem::separator(app)?,
+            &update,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
+    )?;
 
     let (icon, template) = tray_icon(app);
 
@@ -70,7 +88,10 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "run" => {
                 show_window(app);
-                let _ = app.emit(RUN_REQUESTED, ());
+                // During a run the item reads "Show progress": just open.
+                if !app.state::<Runner>().is_running() {
+                    let _ = app.emit(RUN_REQUESTED, ());
+                }
             }
             "update" => {
                 show_window(app);
@@ -84,6 +105,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
 
     app.state::<updater::UpdateState>().set_tray_item(update);
     *app.state::<AppState>().last_run_item.lock().unwrap() = Some(last_run);
+    *app.state::<AppState>().run_item.lock().unwrap() = Some(run);
     refresh(app);
     start_reminder(app.clone());
     Ok(())
@@ -239,6 +261,7 @@ pub fn animate_while_running(app: &AppHandle) {
     }
     let app = app.clone();
     thread::spawn(move || {
+        set_run_text(&app, RUNNING_TEXT);
         let (base, template) = tray_icon(&app);
         let frames: Vec<_> = (0..FRAMES)
             .map(|i| frame(&base, levels(i as f32 / FRAMES as f32)))
@@ -263,9 +286,16 @@ pub fn animate_while_running(app: &AppHandle) {
         }
         let (icon, template) = tray_icon(&app);
         set_icon(&app, icon, template);
+        set_run_text(&app, RUN_TEXT);
         WAITING.store(false, Ordering::SeqCst);
         ANIMATING.store(false, Ordering::SeqCst);
     });
+}
+
+fn set_run_text(app: &AppHandle, text: &str) {
+    if let Some(item) = app.state::<AppState>().run_item.lock().unwrap().as_ref() {
+        let _ = item.set_text(text);
+    }
 }
 
 pub fn show_window(app: &AppHandle) {
@@ -360,10 +390,12 @@ fn check_overdue(app: &AppHandle) {
     let body = match last_update(&state) {
         Some((_, age)) if age.num_days() < i64::from(days) => return,
         Some((_, age)) => format!(
-            "Last update was {}. Use Run now in the tray menu.",
+            "Last update was {}. Choose Update everything in the tray menu.",
             format_age(age)
         ),
-        None => "No finished update recorded yet. Use Run now in the tray menu.".into(),
+        None => {
+            "No finished update recorded yet. Choose Update everything in the tray menu.".into()
+        }
     };
     let mut last = state.last_notified.lock().unwrap();
     if last.is_some_and(|t| t.elapsed() < RENOTIFY_AFTER) {

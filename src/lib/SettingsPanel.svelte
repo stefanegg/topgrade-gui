@@ -119,7 +119,7 @@
       {/if}
     </div>
     <p class="hint field">
-      The options on the Overview page are saved too, and are used by Run now in the tray.
+      The options on the Overview page are saved too, and are used by Update everything in the tray menu.
     </p>
   </section>
 

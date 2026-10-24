@@ -25,7 +25,8 @@ pub const UPDATE_PROGRESS: &str = "update-progress";
 const FIRST_CHECK: Duration = Duration::from_secs(2 * 60);
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
-const CHECK_TEXT: &str = "Check for updates";
+/// Tray item text; "app" because "updates" alone reads as package updates.
+pub const CHECK_TEXT: &str = "Check for app updates…";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,7 +72,7 @@ pub async fn check(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
     *state.pending.lock().unwrap() = update;
     if let Some(item) = state.tray_item.lock().unwrap().as_ref() {
         let _ = item.set_text(match &info {
-            Some(info) => format!("Install update {}…", info.version),
+            Some(info) => format!("Install Topgrade GUI {}…", info.version),
             None => CHECK_TEXT.to_string(),
         });
     }
@@ -116,8 +117,8 @@ fn announce(app: &AppHandle, info: UpdateInfo) {
             .builder()
             .title("Update available")
             .body(format!(
-                "Topgrade GUI {} is available. Choose \"Install update\" in the tray menu.",
-                info.version
+                "Topgrade GUI {v} is available. Choose \"Install Topgrade GUI {v}…\" in the tray menu.",
+                v = info.version
             ))
             .show();
     }
