@@ -61,6 +61,11 @@ fn write_input(runner: State<Runner>, data: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn set_waiting_input(app: AppHandle, waiting: bool, password: bool) {
+    tray::set_waiting(&app, waiting, password);
+}
+
+#[tauri::command]
 fn resize_pty(runner: State<Runner>, cols: u16, rows: u16) -> Result<(), String> {
     runner.resize(cols, rows)
 }
@@ -179,6 +184,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             start_run,
             write_input,
+            set_waiting_input,
             resize_pty,
             stop_run,
             list_runs,

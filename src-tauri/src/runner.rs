@@ -279,11 +279,21 @@ pub fn replay(
     Ok(())
 }
 
+/// Shell snippet that runs topgrade. Debug builds honour `TOPGRADE_GUI_BIN`
+/// so `scripts/fake-topgrade.sh` can stand in for it.
+fn topgrade_cmd() -> String {
+    #[cfg(debug_assertions)]
+    if let Ok(bin) = std::env::var("TOPGRADE_GUI_BIN") {
+        return format!("'{}'", bin.replace('\'', "'\\''"));
+    }
+    "topgrade".into()
+}
+
 /// `topgrade 17.12.3` → `17.12.3`, via the login shell like the run itself.
 fn topgrade_version() -> Option<String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
     let output = std::process::Command::new(shell)
-        .args(["-l", "-c", "topgrade --version"])
+        .args(["-l", "-i", "-c", &format!("{} --version", topgrade_cmd())])
         .output()
         .ok()?;
     let text = String::from_utf8_lossy(&output.stdout);
@@ -314,17 +324,19 @@ fn send_event(stream: &Channel<InvokeResponseBody>, event: &impl Serialize) {
 }
 
 /// Runs topgrade through the user's login shell so GUI-launched apps get the
-/// same PATH as a terminal (macOS GUI apps start with a minimal PATH).
+/// same PATH as a terminal (macOS GUI apps start with a minimal PATH). `-i`
+/// also sources rc files (`.zshrc`), where tools like pnpm add their PATH.
 fn build_command(flags: &[String]) -> CommandBuilder {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
     // Topgrade output is localized; force English so the parser can match it.
     // Set after profile loading so the user's shell config cannot override it.
     let script = format!(
-        "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8; exec topgrade {}",
+        "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8; exec {} {}",
+        topgrade_cmd(),
         flags.join(" ")
     );
     let mut cmd = CommandBuilder::new(shell);
-    cmd.args(["-l", "-c", &script]);
+    cmd.args(["-l", "-i", "-c", &script]);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     if let Some(home) = std::env::var_os("HOME") {
