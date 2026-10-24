@@ -163,6 +163,20 @@ a {
   text-decoration: underline;
 }
 
+/* A source (dnf, Flatpak, …), as on the run page and Overview's list. */
+.source-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
