@@ -2,7 +2,7 @@
 
 A desktop wrapper for [topgrade](https://github.com/topgrade-rs/topgrade) (Tauri + Svelte), for Linux and macOS. Developed and tested on Fedora KDE and macOS.
 
-![Topgrade GUI showing a finished run: steps with status, update counts and durations on the left, the terminal output on the right](docs/screenshot.png)
+![Topgrade GUI after a finished run: a one-sentence summary, then every updated package with its old and new version, grouped into Apps and System and tools, with filters and search; the terminal output is in a drawer at the bottom](docs/screenshot.png)
 
 - Runs topgrade in an embedded terminal (type sudo passwords and answers there)
 - Shows what was updated after each run: every package with old → new version, grouped into apps, system and firmware, with search and copy
