@@ -146,6 +146,12 @@ export interface Settings {
   theme: Theme;
 }
 
+/** sources.rs `Sources`: what topgrade would update, from a dry run. */
+export interface Sources {
+  detectedAt: string;
+  names: string[];
+}
+
 /** updater.rs `UpdateInfo`. */
 export interface UpdateInfo {
   version: string;

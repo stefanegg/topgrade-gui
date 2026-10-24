@@ -326,7 +326,7 @@ fn send_event(stream: &Channel<InvokeResponseBody>, event: &impl Serialize) {
 /// Runs topgrade through the user's login shell so GUI-launched apps get the
 /// same PATH as a terminal (macOS GUI apps start with a minimal PATH). `-i`
 /// also sources rc files (`.zshrc`), where tools like pnpm add their PATH.
-fn build_command(flags: &[String]) -> CommandBuilder {
+pub(crate) fn build_command(flags: &[String]) -> CommandBuilder {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
     // Topgrade output is localized; force English so the parser can match it.
     // Set after profile loading so the user's shell config cannot override it.
