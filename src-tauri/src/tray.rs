@@ -143,7 +143,13 @@ fn frame(base: &Image<'_>, lit: Option<usize>) -> Image<'static> {
             // The chevrons are parallel 45° lines about the icon's centre
             // column, so `v` is constant along one and picks it out.
             let v = y as f32 - (x as f32 - w as f32 / 2.0 + 0.5).abs();
-            let k = if v < 9.0 { 0 } else if v < 18.0 { 1 } else { 2 };
+            let k = if v < 9.0 {
+                0
+            } else if v < 18.0 {
+                1
+            } else {
+                2
+            };
             let level = if lit == Some(k) { 1.0 } else { DIM };
             let a = &mut rgba[(y * w + x) * 4 + 3];
             *a = (f32::from(*a) / BASE_OPACITY[k] * level).min(255.0) as u8;
