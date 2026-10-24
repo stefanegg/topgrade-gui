@@ -159,53 +159,60 @@
       </div>
     {/if}
 
-    <section class="card sources" aria-labelledby="sources-title">
-      <div class="sources-head">
-        <h2 id="sources-title">What topgrade updates on this computer</h2>
-        {#if sources}
-          <span class="muted small">
-            {sources.names.length} sources · checked {formatAgo(sources.detectedAt, now)}
-          </span>
-        {/if}
-        <button class="link-button small" onclick={ondetect} disabled={detecting}>
-          {detecting ? "Checking…" : sources ? "Check again" : "Check now"}
-        </button>
-      </div>
-      {#if sources}
-        <ul>
-          {#each sources.names as name}
-            {@const count = lastCounts.get(name) ?? 0}
-            <li>
-              <span class="source-name" title={sourceName(name)}>{sourceName(name)}</span>
-              {#if count > 0}
-                <span class="count" title="Updated in the last run">{count}</span>
-              {/if}
-            </li>
-          {/each}
-        </ul>
-        <p class="muted small">
-          Found with a dry run of topgrade, which only looks and changes nothing. Numbers show what each one updated in
-          the last run.
-        </p>
-      {:else if detecting}
-        <p class="muted">Asking topgrade what it can update here…</p>
-      {:else if sourcesError}
-        <p class="muted">Couldn't find out: {sourcesError}</p>
-      {/if}
-    </section>
   </section>
+
+  <aside class="card sources" aria-labelledby="sources-title">
+    <div class="sources-head">
+      <h2 id="sources-title">What topgrade updates here</h2>
+      {#if sources}
+        <span class="muted small meta">
+          {sources.names.length} sources · checked {formatAgo(sources.detectedAt, now)}
+        </span>
+      {/if}
+      <button class="link-button small" onclick={ondetect} disabled={detecting}>
+        {detecting ? "Checking…" : sources ? "Check again" : "Check now"}
+      </button>
+    </div>
+    {#if sources}
+      <ul>
+        {#each sources.names as name}
+          {@const count = lastCounts.get(name) ?? 0}
+          <li>
+            <span class="source-name" title={sourceName(name)}>{sourceName(name)}</span>
+            {#if count > 0}
+              <span class="count" title="Updated in the last run">{count}</span>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+      <p class="muted small">
+        Found with a dry run of topgrade, which only looks and changes nothing. Numbers show what each one updated in
+        the last run.
+      </p>
+    {:else if detecting}
+      <p class="muted">Asking topgrade what it can update here…</p>
+    {:else if sourcesError}
+      <p class="muted">Couldn't find out: {sourcesError}</p>
+    {/if}
+  </aside>
 </div>
 
 <style>
   .home {
     width: 100%;
-    max-width: 760px;
+    max-width: 1120px;
     margin: 0 auto;
     box-sizing: border-box;
     padding: 32px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    align-items: flex-start;
   }
 
   .main-col {
+    flex: 999 1 520px;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 24px;
@@ -322,24 +329,31 @@
     color: var(--danger);
   }
 
+  /* Side column; wraps below the main column in a narrow window. */
   .sources {
+    flex: 1 1 280px;
+    min-width: 0;
     padding: 20px 24px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
   }
 
   .sources-head {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 6px 12px;
+    gap: 4px 12px;
   }
 
   .sources-head h2 {
     margin: 0;
     font-size: 15px;
     font-weight: 600;
+    flex: 1 0 100%;
+  }
+
+  .sources-head .meta {
     margin-right: auto;
   }
 
@@ -347,17 +361,14 @@
     list-style: none;
     margin: 0;
     padding: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-    gap: 6px 16px;
   }
 
   .sources li {
     display: flex;
     align-items: center;
     gap: 8px;
-    min-height: 28px;
-    border-bottom: 1px solid var(--border-soft);
+    min-height: 34px;
+    border-top: 1px solid var(--border-soft);
   }
 
   .source-name {
