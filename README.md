@@ -2,12 +2,15 @@
 
 A desktop wrapper for [topgrade](https://github.com/topgrade-rs/topgrade) (Tauri + Svelte), for Linux and macOS. Developed and tested on Fedora KDE and macOS.
 
-![Topgrade GUI showing a finished run: steps with status, update counts and durations on the left, the terminal output on the right](docs/screenshot.png)
+![Topgrade GUI after a finished run: a one-sentence summary, then every updated package with its old and new version, grouped into Apps and System and tools, with filters and search; the terminal output is in a drawer at the bottom](docs/screenshot.png)
 
 - Runs topgrade in an embedded terminal (type sudo passwords and answers there)
-- Splits the output into steps with status, duration and what each step updated
+- Shows what was updated after each run: every package with old → new version, grouped into apps, system and firmware, with search and copy
+- Splits the output into steps with status and duration; the full terminal output is one click away
+- Asks for sudo passwords in the app, and says when a restart is needed
+- Light, dark or system theme
 - Keeps the last 12 runs with their logs and summaries (History)
-- Lives in the tray: Run now, last run, and a reminder when an update is overdue
+- Lives in the tray: last update, Update everything, and a reminder when an update is overdue
 - Zoom the terminal font with Shift + mouse wheel (remembered)
 - Updates itself from signed GitHub Releases (asks first)
 
@@ -79,7 +82,7 @@ To release, add entries under `Unreleased` in `CHANGELOG.md`, then run `scripts/
 
 ## Auto-update
 
-The app checks `releases/latest/download/latest.json` on GitHub (first after 2 minutes, then every 6 hours; Settings can turn this off), shows a banner in the window and an "Install update …" tray item, and on confirmation downloads the update, verifies its signature against the public key in `tauri.conf.json`, installs it and restarts. AppImage and macOS builds are replaced in place; RPM and deb installs are upgraded through `pkexec` (password prompt). Updates are refused while a topgrade run is active.
+The app checks `releases/latest/download/latest.json` on GitHub (first after 2 minutes, then every 6 hours; Settings can turn this off), shows a banner in the window and an "Install Topgrade GUI …" tray item, and on confirmation downloads the update, verifies its signature against the public key in `tauri.conf.json`, installs it and restarts. AppImage and macOS builds are replaced in place; RPM and deb installs are upgraded through `pkexec` (password prompt). Updates are refused while a topgrade run is active.
 
 Release builds are signed in CI with the `TAURI_SIGNING_PRIVATE_KEY` repository secret. The private key lives in `~/.tauri/topgrade-gui.key` on the maintainer's machine — keep a backup; without it installed apps can't be updated. Local `pnpm build:linux` / `pnpm build:mac` runs need it too (they create update artifacts): `export TAURI_SIGNING_PRIVATE_KEY=~/.tauri/topgrade-gui.key TAURI_SIGNING_PRIVATE_KEY_PASSWORD=`.
 

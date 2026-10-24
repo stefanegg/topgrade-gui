@@ -4,53 +4,77 @@
     formatDate,
     formatDuration,
     isDryRun,
+    isFinished,
     summaryTotals,
     type RunSummary,
   } from "./run";
+  import { collectChanges, highlightNames } from "./changes";
 
   interface Props {
     runs: RunSummary[];
     now: number;
+    /** Opening a run replays it, which can't happen during a live run. */
+    disabled: boolean;
     onopen: (run: RunSummary) => void;
-    onclose: () => void;
   }
 
-  let { runs, now, onopen, onclose }: Props = $props();
+  let { runs, now, disabled, onopen }: Props = $props();
+
+  function names(run: RunSummary): string {
+    const changes = collectChanges(
+      run.steps.map((s) => ({ name: s.name, group: s.group, items: s.updates?.items ?? [] })),
+    );
+    const shown = highlightNames(changes);
+    if (shown.length === 0) return "";
+    const rest = changes.length - shown.length;
+    return rest > 0 ? `${shown.join(", ")} and ${rest} more` : shown.join(", ");
+  }
 </script>
 
-<section>
-  <header>
-    <h2>History</h2>
-    <span class="hint">Last {runs.length} {runs.length === 1 ? "run" : "runs"}</span>
-    <button onclick={onclose}>Close</button>
-  </header>
+<div class="history">
+  <div class="head">
+    <h1>History</h1>
+    <span class="muted">Your last runs are kept here with their full output.</span>
+  </div>
+  {#if disabled}
+    <p class="muted">Past runs can be opened once the current run has finished.</p>
+  {/if}
   {#if runs.length === 0}
-    <p class="empty">No saved runs yet. Each run is saved here when it finishes.</p>
+    <p class="muted">No saved runs yet. Each run is saved here when it finishes.</p>
   {:else}
-    <ul>
+    <ul class="card">
       {#each runs as run (run.id)}
         {@const totals = summaryTotals(run)}
         <li>
-          <button onclick={() => onopen(run)}>
-            <span class="date">{formatDate(run.startedAt)}</span>
-            <span class="ago">{formatAgo(run.startedAt, now)}</span>
-            <span class="result">
-              {#if totals.updated > 0}
-                <strong>{totals.updated}</strong> updated
-              {:else}
-                Nothing updated
-              {/if}
-              {#if totals.failed > 0}
-                · <span class="failed">{totals.failed} failed</span>
-              {/if}
-              {#if run.exitCode !== null && run.exitCode !== 0}
-                · <span class="failed">exit {run.exitCode}</span>
-              {/if}
+          <button onclick={() => onopen(run)} {disabled}>
+            <span class="when">
+              <span>{formatDate(run.startedAt)}</span>
+              <span class="muted small">{formatAgo(run.startedAt, now)}</span>
             </span>
-            <span class="tags">
-              {#if isDryRun(run)}<span class="tag">dry run</span>{/if}
+            <span class="what">
+              <span>
+                {#if !isFinished(run)}
+                  <span class="failed">Didn't finish</span>
+                  {#if totals.updated > 0}
+                    · <strong>{totals.updated}</strong> updated before it stopped
+                  {/if}
+                {:else if isDryRun(run)}
+                  Preview
+                {:else if totals.updated > 0}
+                  <strong>{totals.updated}</strong> {totals.updated === 1 ? "update" : "updates"}
+                {:else}
+                  Nothing updated
+                {/if}
+                {#if totals.failed > 0}
+                  · <span class="failed">{totals.failed} failed</span>
+                {/if}
+                {#if isFinished(run) && run.exitCode !== null && run.exitCode !== 0}
+                  · <span class="failed">exit code {run.exitCode}</span>
+                {/if}
+              </span>
+              {#if names(run)}<span class="muted small">{names(run)}</span>{/if}
             </span>
-            <span class="duration">
+            <span class="muted duration">
               {run.durationSecs > 0 ? formatDuration(run.durationSecs * 1000) : ""}
             </span>
           </button>
@@ -58,65 +82,57 @@
       {/each}
     </ul>
   {/if}
-</section>
+</div>
 
 <style>
-  section {
-    position: absolute;
-    inset: 0;
-    z-index: 10;
-    overflow-y: auto;
-    background: #1e1e1e;
-  }
-
-  header {
+  .history {
+    width: 100%;
+    max-width: 1120px;
+    margin: 0 auto;
+    box-sizing: border-box;
+    padding: 28px 24px 40px;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
     gap: 12px;
-    padding: 10px 16px;
-    border-bottom: 1px solid #3a3a3a;
   }
 
-  h2 {
+  h1 {
     margin: 0;
-    font-size: 15px;
+    font-size: 22px;
+    font-weight: 600;
   }
 
-  .hint {
-    color: #888;
-    flex: 1;
-  }
-
-  header button {
-    padding: 4px 14px;
-    border-radius: 6px;
-    border: 1px solid #555;
-    background: #3a3a3a;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-  }
-
-  .empty {
-    color: #888;
-    padding: 16px;
+  p {
+    margin: 0;
   }
 
   ul {
     list-style: none;
     margin: 0;
     padding: 0;
+    overflow: hidden;
   }
 
-  li button {
-    display: grid;
-    grid-template-columns: 170px 70px 1fr auto 70px;
+  li + li button {
+    border-top: 1px solid var(--border-soft);
+  }
+
+  button {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
+    gap: 8px 24px;
     width: 100%;
-    padding: 10px 16px;
-    border: none;
-    border-bottom: 1px solid #2a2a2a;
+    min-height: 56px;
+    padding: 12px 20px;
+    border: 0;
     background: none;
     color: inherit;
     font: inherit;
@@ -124,34 +140,37 @@
     cursor: pointer;
   }
 
-  li button:hover {
-    background: #2a2a2a;
+  button:hover:not(:disabled) {
+    background: var(--surface-2);
   }
 
-  .ago,
+  button:disabled {
+    cursor: default;
+  }
+
+  .when {
+    width: 180px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .what {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .small {
+    font-size: 12px;
+  }
+
   .duration {
-    color: #888;
     font-variant-numeric: tabular-nums;
   }
 
-  .duration {
-    text-align: right;
-  }
-
-  .result strong {
-    color: #4caf50;
-  }
-
   .failed {
-    color: #e5534b;
-    font-weight: bold;
-  }
-
-  .tag {
-    font-size: 11px;
-    padding: 1px 6px;
-    border-radius: 8px;
-    background: #333;
-    color: #aaa;
+    color: var(--danger);
+    font-weight: 600;
   }
 </style>

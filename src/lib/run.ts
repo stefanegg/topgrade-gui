@@ -1,4 +1,5 @@
 import type { IMarker } from "@xterm/xterm";
+import type { Theme } from "./theme";
 
 export type StepStatus = "ok" | "failed" | "ignored" | "skipped";
 export type PromptKind = "retry" | "yesNo" | "password";
@@ -109,6 +110,12 @@ export function isDryRun(run: RunSummary): boolean {
   return run.flags.includes("--dry-run") || run.flags.includes("-n");
 }
 
+/** Whether topgrade got as far as its closing summary; a stopped or crashed
+ *  run has no step results. Mirrors `RunSummary::is_finished` in history.rs. */
+export function isFinished(run: RunSummary): boolean {
+  return run.steps.some((s) => s.status !== null) || run.unmatched.length > 0;
+}
+
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     weekday: "short",
@@ -136,6 +143,13 @@ export interface Settings {
   assumeYes: boolean;
   fontSize: number;
   autoCheckUpdates: boolean;
+  theme: Theme;
+}
+
+/** sources.rs `Sources`: what topgrade would update, from a dry run. */
+export interface Sources {
+  detectedAt: string;
+  names: string[];
 }
 
 /** updater.rs `UpdateInfo`. */

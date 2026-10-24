@@ -4,10 +4,12 @@ mod history;
 mod parser;
 mod runner;
 mod settings;
+mod sources;
 mod tray;
 mod updater;
 mod window_state;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use history::RunSummary;
@@ -73,6 +75,30 @@ fn resize_pty(runner: State<Runner>, cols: u16, rows: u16) -> Result<(), String>
 #[tauri::command]
 fn stop_run(runner: State<Runner>) -> Result<(), String> {
     runner.stop()
+}
+
+/// What topgrade updates on this machine, from the last background dry run.
+#[tauri::command]
+fn get_sources(state: State<AppState>) -> Option<sources::Sources> {
+    sources::load(&state.data_dir)
+}
+
+/// Runs a background `topgrade --dry-run` to (re)detect the sources and
+/// caches the result. Only one at a time.
+#[tauri::command]
+async fn detect_sources(app: AppHandle) -> Result<sources::Sources, String> {
+    static DETECTING: AtomicBool = AtomicBool::new(false);
+    if DETECTING.swap(true, Ordering::SeqCst) {
+        return Err("already checking".into());
+    }
+    let result = tauri::async_runtime::spawn_blocking(sources::detect)
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|r| r);
+    DETECTING.store(false, Ordering::SeqCst);
+    let detected = result?;
+    let _ = sources::save(&app.state::<AppState>().data_dir, &detected);
+    Ok(detected)
 }
 
 /// Semver derived from git tags at build time (see build.rs).
@@ -194,6 +220,8 @@ pub fn run() {
             updater::install_update,
             get_settings,
             set_settings,
+            get_sources,
+            detect_sources,
             replay_fixture
         ])
         .build(tauri::generate_context!())

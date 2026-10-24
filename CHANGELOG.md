@@ -6,6 +6,27 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+## 0.6.0 - 2026-10-24
+
+### Added
+- "What changed" page after each run: every updated package with its old and new version, grouped into Apps, System and tools, and Firmware, with a search box, filters and "Copy list". A one-sentence summary names the apps you'll recognise.
+- A "Restart when convenient" note when firmware or core system packages were updated.
+- Password prompts appear as a field in the app; the password is passed to sudo in the terminal and not stored.
+- Overview lists what topgrade updates on this computer, found with a background dry run (changes nothing, needs no password) and refreshed daily or with its refresh button.
+- Theme setting: System, Light or Dark. On Linux the tray icon keeps following the desktop panel's theme.
+
+### Changed
+- Tray menu reordered: "Last update" first, then "Update everything" (was "Run now"; shows "Show progress" during a run) and "Open Topgrade GUI"; "Check for app updates…" (was "Check for updates") and Quit sit apart below.
+- A run that was stopped before topgrade's summary counts as not finished: Overview says the last update didn't finish, History marks it "Didn't finish", and the update reminder (and "Last update" in the tray menu) count from the last finished run instead.
+- New layout with Overview, History and Settings pages. Overview shows whether an update is due, the run options in plain words, and the last run's results; during a run it shows progress and the steps so far.
+- The terminal moved into a drawer at the bottom that you can open and close; clicking a step opens it at that step's output.
+- The app's own logo and colours are used throughout.
+- Escape (and the other back gestures) also closes the results after a run or preview and returns to Overview. On the History list or Settings, Escape returns to Overview too. On Overview itself, Escape closes the window (the app keeps running in the tray).
+- Escape during a run or preview asks "Stop this update?" before stopping it (Keep running is the default). While you're typing in the terminal, Escape goes to the terminal instead.
+- Past runs open as a sub-page with a breadcrumb and a Back button that returns to where you came from (History or Overview); Escape, the mouse back button and Alt+← (⌘[ on macOS) work too.
+- The app calls itself "Topgrade GUI" throughout, to keep it apart from topgrade, the tool it runs.
+- No separate title bar: the app's header is the title bar (drag to move, double-click to maximize). Linux gets the app's own minimize, maximize and close buttons; macOS keeps its native window buttons, centred in the header, and shows only the logo there (the menu bar already names the app).
+
 ## 0.5.0 - 2026-10-24
 
 ### Added

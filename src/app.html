@@ -5,6 +5,12 @@
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Topgrade GUI</title>
+    <script>
+      // Apply the saved theme before the first paint (see src/lib/theme.ts).
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("theme") || "system";
+      } catch {}
+    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
