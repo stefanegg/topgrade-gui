@@ -1,4 +1,5 @@
 import type { IMarker } from "@xterm/xterm";
+import type { Theme } from "./theme";
 
 export type StepStatus = "ok" | "failed" | "ignored" | "skipped";
 export type PromptKind = "retry" | "yesNo" | "password";
@@ -136,6 +137,7 @@ export interface Settings {
   assumeYes: boolean;
   fontSize: number;
   autoCheckUpdates: boolean;
+  theme: Theme;
 }
 
 /** updater.rs `UpdateInfo`. */

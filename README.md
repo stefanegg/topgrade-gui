@@ -5,7 +5,10 @@ A desktop wrapper for [topgrade](https://github.com/topgrade-rs/topgrade) (Tauri
 ![Topgrade GUI showing a finished run: steps with status, update counts and durations on the left, the terminal output on the right](docs/screenshot.png)
 
 - Runs topgrade in an embedded terminal (type sudo passwords and answers there)
-- Splits the output into steps with status, duration and what each step updated
+- Shows what was updated after each run: every package with old → new version, grouped into apps, system and firmware, with search and copy
+- Splits the output into steps with status and duration; the full terminal output is one click away
+- Asks for sudo passwords in the app, and says when a restart is needed
+- Light, dark or system theme
 - Keeps the last 12 runs with their logs and summaries (History)
 - Lives in the tray: Run now, last run, and a reminder when an update is overdue
 - Zoom the terminal font with Shift + mouse wheel (remembered)

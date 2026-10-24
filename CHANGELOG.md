@@ -6,6 +6,17 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+### Added
+- "What changed" page after each run: every updated package with its old and new version, grouped into Apps, System and tools, and Firmware, with a search box, filters and "Copy list". A one-sentence summary names the apps you'll recognise.
+- A "Restart when convenient" note when firmware or core system packages were updated.
+- Password prompts appear as a field in the app; the password is passed to sudo in the terminal and not stored.
+- Theme setting: System, Light or Dark.
+
+### Changed
+- New layout with Overview, History and Settings pages. Overview shows whether an update is due, the run options in plain words, and the last run's results; during a run it shows progress and the steps so far.
+- The terminal moved into a drawer at the bottom that you can open and close; clicking a step opens it at that step's output.
+- The app's own logo and colours are used throughout.
+
 ## 0.5.0 - 2026-10-24
 
 ### Added
