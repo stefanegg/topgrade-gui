@@ -260,7 +260,7 @@
                     <span class="pkg">{change.name}</span>
                     {#if change.id}<span class="id">{change.id}</span>{/if}
                   </td>
-                  <td><span class="badge">{change.source}</span></td>
+                  <td><span class="source-tag">{change.source}</span></td>
                   <td class="version">
                     {#if change.from}<span class="muted">{change.from}</span> <span class="muted" aria-label="to">→</span>{/if}
                     {#if change.to}<strong>{change.to}</strong>{:else if !change.from}<span class="muted">updated</span>{/if}
@@ -578,15 +578,6 @@
   .version {
     font-size: 13px;
     word-break: break-all;
-  }
-
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
-    background: var(--surface-2);
-    color: var(--muted);
-    font-size: 12px;
   }
 
   .more {

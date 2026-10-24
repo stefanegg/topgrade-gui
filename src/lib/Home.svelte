@@ -177,7 +177,7 @@
       <ul>
         {#each sources.names as name}
           {@const count = lastCounts.get(name) ?? 0}
-          <li>
+          <li class="source-tag">
             <span class="source-name" title={sourceName(name)}>{sourceName(name)}</span>
             {#if count > 0}
               <span class="count" title="Updated in the last run">{count}</span>
@@ -361,26 +361,22 @@
     list-style: none;
     margin: 0;
     padding: 0;
-  }
-
-  .sources li {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 34px;
-    border-top: 1px solid var(--border-soft);
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .source-name {
-    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  /* Sits inside the tag, flush with its right edge. */
   .count {
-    padding: 0 7px;
+    margin-right: -4px;
+    padding: 0 6px;
     border-radius: 9px;
     background: var(--accent-soft);
     color: var(--link);
