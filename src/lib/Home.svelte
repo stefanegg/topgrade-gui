@@ -48,19 +48,6 @@
   );
   let lastTotals = $derived(lastRun ? summaryTotals(lastRun) : null);
 
-  /** Items each top-level step updated in the last run; a nested run (e.g.
-   *  inside Toolbx) counts toward the top-level step before it. */
-  let lastCounts = $derived.by(() => {
-    const counts = new Map<string, number>();
-    let parent: string | null = null;
-    for (const step of lastRun?.steps ?? []) {
-      if (step.group === null) parent = step.name;
-      if (parent === null) continue;
-      counts.set(parent, (counts.get(parent) ?? 0) + (step.updates?.items.length ?? 0));
-    }
-    return counts;
-  });
-
   let lastSummary = $derived.by(() => {
     const names = highlightNames(lastChanges);
     if (names.length === 0) {
@@ -185,19 +172,12 @@
     {#if sources}
       <ul>
         {#each sources.names as name}
-          {@const count = lastCounts.get(name) ?? 0}
           <li class="source-tag">
             <span class="source-name" title={sourceName(name)}>{sourceName(name)}</span>
-            {#if count > 0}
-              <span class="count" title="Updated in the last run">{count}</span>
-            {/if}
           </li>
         {/each}
       </ul>
-      <p class="muted small">
-        Found with a dry run of topgrade, which only looks and changes nothing. Numbers show what each one updated in
-        the last run.
-      </p>
+      <p class="muted small">Found with a dry run of topgrade, which only looks and changes nothing.</p>
     {:else if detecting}
       <p class="muted">Asking topgrade what it can update here…</p>
     {:else if sourcesError}
@@ -422,17 +402,4 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-
-  /* Sits inside the tag, flush with its right edge. */
-  .count {
-    margin-right: -4px;
-    padding: 0 6px;
-    border-radius: 9px;
-    background: var(--accent-soft);
-    color: var(--link);
-    font-size: 12px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-
 </style>
