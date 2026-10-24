@@ -64,6 +64,9 @@ jobs:
           # Signs the update artifacts (latest.json is generated and uploaded too).
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          # Ad-hoc code signature for the macOS bundle (no Apple account): seals
+          # the bundle so it isn't reported as "damaged", but isn't notarized.
+          APPLE_SIGNING_IDENTITY: "-"
         with:
           tagName: ${{ env.TAG }}
           releaseName: Topgrade GUI ${{ env.TAG }}
