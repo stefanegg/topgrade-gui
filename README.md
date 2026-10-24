@@ -69,6 +69,8 @@ pnpm tauri dev
 
 Dev builds have a "Replay fixture…" menu that plays the logs in `src-tauri/tests/fixtures/` through the UI. Tests: `cd src-tauri && cargo test`.
 
+To test input prompts (tray pulse, notification), run a fake topgrade that asks for a sudo password, a yes/no and a retry: `TOPGRADE_GUI_BIN="$PWD/scripts/fake-topgrade.sh" pnpm tauri dev`. Only debug builds honour the variable; `DELAY=<seconds>` sets the pause before each prompt (default 6).
+
 ## Versioning and releases
 
 The app version is derived from git tags at build time (`src-tauri/build.rs`) and shown in Settings: a tagged commit `v1.2.3` is `1.2.3`; later commits are `1.2.3-dev.N+gSHA`; uncommitted changes add `+dirty`. Without any `v*` tag it falls back to the version in `Cargo.toml`.

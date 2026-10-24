@@ -6,6 +6,16 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+### Added
+- When topgrade waits for input (sudo password, yes/no, retry) the tray icon pulses, and a notification (plus Dock bounce on macOS) appears if the window is not in front.
+- A banner and a coloured footer line in the terminal show when a run has ended and how it went.
+
+### Changed
+- Smoother tray icon animation (more frames, gradual glow).
+
+### Fixed
+- Topgrade runs in an interactive login shell so PATH set in `.zshrc` (e.g. pnpm's bin dir) is available; fixes `ERR_PNPM_GLOBAL_BIN_DIR_NOT_IN_PATH`.
+
 ## 0.4.6 - 2026-10-24
 
 ### Fixed

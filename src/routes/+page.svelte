@@ -14,6 +14,7 @@
     formatDate,
     isDryRun,
     runTotals,
+    formatDuration,
     type RunSummary,
     type Settings,
     type Step,
@@ -41,6 +42,9 @@
   let receivedOutput = false;
   let summarySeen = false;
   let runIsDry = false;
+  let runStartedAt = 0;
+  /** How the live run ended; shown as a banner and a footer in the terminal. */
+  let outcome = $state<{ ok: boolean; text: string } | null>(null);
 
   let history = $state<RunSummary[]>([]);
   let showHistory = $state(false);
@@ -165,6 +169,7 @@
     switch (e.kind) {
       case "started":
         logPath = e.logPath;
+        runStartedAt = Date.now();
         running = true;
         status = viewing ? "Loading…" : "Running…";
         break;
@@ -210,6 +215,10 @@
         const step = steps.at(-1);
         if (step) step.needsInput = true;
         status = e.prompt === "password" ? "Waiting for password…" : "Waiting for input…";
+        if (!viewing) {
+          waitingForInput = true;
+          invoke("set_waiting_input", { waiting: true, password: e.prompt === "password" }).catch(() => {});
+        }
         term.focus();
         break;
       }
@@ -231,9 +240,25 @@
             : e.code === 0
               ? "Finished"
               : `Exited with code ${e.code}`;
+        showOutcome(e);
         loadHistory();
         break;
     }
+  }
+
+  function showOutcome(e: StreamEvent & { kind: "exited" | "error" }) {
+    const t = runTotals(steps);
+    const took = formatDuration(Date.now() - runStartedAt);
+    const failed = t.failed > 0 ? ` · ${t.failed} failed` : "";
+    const updated = t.updated > 0 ? `${t.updated} updated` : "nothing updated";
+    let text: string;
+    if (e.kind === "error") text = `Run failed: ${e.message}`;
+    else if (e.code !== 0) text = `Run ended with exit code ${e.code} · ${took}${failed}`;
+    else text = `Run finished · ${updated}${failed} · ${took}`;
+    const ok = e.kind === "exited" && e.code === 0 && t.failed === 0;
+    outcome = { ok, text };
+    const color = ok ? "32" : "31";
+    term.write(`\r\n\x1b[1;${color}m━━ ${text} ━━\x1b[0m\r\n`);
   }
 
   // topgrade omits a step from its summary when the step aborts during a dry
@@ -260,7 +285,13 @@
     });
   }
 
+  let waitingForInput = false;
+
   function clearInputRequests() {
+    if (waitingForInput) {
+      waitingForInput = false;
+      invoke("set_waiting_input", { waiting: false, password: false }).catch(() => {});
+    }
     for (const step of steps) step.needsInput = false;
   }
 
@@ -285,6 +316,7 @@
 
   function closeRun() {
     viewing = null;
+    outcome = null;
     term.reset();
     steps = [];
     unmatched = [];
@@ -294,6 +326,7 @@
   }
 
   async function start(command: string, args: Record<string, unknown>) {
+    outcome = null;
     term.reset();
     fit.fit();
     steps = [];
@@ -483,6 +516,12 @@
       <button onclick={closeRun}>Close</button>
     </div>
   {/if}
+  {#if outcome}
+    <div class="outcome" class:ok={outcome.ok} class:bad={!outcome.ok}>
+      <span>{outcome.ok ? "✓" : "✗"} {outcome.text}</span>
+      <button onclick={() => (outcome = null)}>Dismiss</button>
+    </div>
+  {/if}
   {#if steps.length > 0}
     <div class="totals" class:has-failed={totals.failed > 0}>
       {#if totals.updated > 0}
@@ -598,6 +637,32 @@
   .totals .failed {
     color: #e5534b;
     font-weight: bold;
+  }
+
+  .outcome {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-weight: bold;
+    border-bottom: 1px solid;
+  }
+
+  .outcome button {
+    margin-left: auto;
+    font-weight: normal;
+  }
+
+  .outcome.ok {
+    background: #1d3524;
+    color: #7fe09a;
+    border-color: #2f6140;
+  }
+
+  .outcome.bad {
+    background: #3a2222;
+    color: #f08a84;
+    border-color: #6b3030;
   }
 
   .viewing {

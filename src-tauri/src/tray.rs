@@ -124,18 +124,79 @@ pub fn update_icon(app: &AppHandle) {
 }
 
 /// Time each animation frame is shown.
-const FRAME: Duration = Duration::from_millis(220);
-/// Which chevron is lit in each frame (0 = top, 2 = bottom; `None` = all
-/// dim): the glow climbs from the bottom arrow to the top one.
-const SWEEP: [Option<usize>; 4] = [Some(2), Some(1), Some(0), None];
+const FRAME: Duration = Duration::from_millis(70);
+/// Frames per sweep; the glow climbs from the bottom chevron to the top one.
+const FRAMES: usize = 14;
 /// Alpha the chevrons were drawn with in the static icon (top, middle, bottom).
 const BASE_OPACITY: [f32; 3] = [0.9, 0.67, 0.43];
 const DIM: f32 = 0.3;
+/// Half-width of one chevron's glow, as a fraction of the sweep.
+const GLOW: f32 = 0.3;
 
 static ANIMATING: AtomicBool = AtomicBool::new(false);
+/// Topgrade is waiting for the user (sudo password, yes/no, retry).
+static WAITING: AtomicBool = AtomicBool::new(false);
 
-/// Redraws the static icon with only chevron `lit` at full strength.
-fn frame(base: &Image<'_>, lit: Option<usize>) -> Image<'static> {
+/// Flags that the run waits for input: the tray icon pulses as a whole
+/// instead of sweeping, and if the window isn't in front the user is
+/// notified (Dock bounce on macOS).
+pub fn set_waiting(app: &AppHandle, waiting: bool, password: bool) {
+    if WAITING.swap(waiting, Ordering::SeqCst) == waiting {
+        return;
+    }
+    if let Some(tray) = app.tray_by_id("main") {
+        let tip = if waiting {
+            "Topgrade GUI · waiting for input"
+        } else {
+            "Topgrade GUI"
+        };
+        let _ = tray.set_tooltip(Some(tip));
+    }
+    if !waiting {
+        refresh(app);
+        return;
+    }
+    let window = app.get_webview_window("main");
+    if window
+        .as_ref()
+        .is_some_and(|w| w.is_focused().unwrap_or(false))
+    {
+        return;
+    }
+    if let Some(window) = window.filter(|w| w.is_visible().unwrap_or(false)) {
+        let _ = window.request_user_attention(Some(tauri::UserAttentionType::Critical));
+    }
+    let body = if password {
+        "Topgrade needs your password."
+    } else {
+        "Topgrade is waiting for your answer."
+    };
+    let _ = app
+        .notification()
+        .builder()
+        .title("Input needed")
+        .body(body)
+        .show();
+}
+
+/// Brightness of each chevron (top, middle, bottom) at `phase` in 0..1: a
+/// smooth pulse that reaches the bottom one first and the top one last.
+fn levels(phase: f32) -> [f32; 3] {
+    let mut out = [DIM; 3];
+    for (k, level) in out.iter_mut().enumerate() {
+        let centre = (2 - k) as f32 / 4.0;
+        let d = (phase - centre).abs();
+        let d = d.min(1.0 - d);
+        if d < GLOW {
+            let pulse = 0.5 * (1.0 + (std::f32::consts::PI * d / GLOW).cos());
+            *level = DIM + (1.0 - DIM) * pulse;
+        }
+    }
+    out
+}
+
+/// Redraws the static icon with each chevron at the given strength.
+fn frame(base: &Image<'_>, levels: [f32; 3]) -> Image<'static> {
     let (w, h) = (base.width() as usize, base.height() as usize);
     let mut rgba = base.rgba().to_vec();
     for y in 0..h {
@@ -150,9 +211,8 @@ fn frame(base: &Image<'_>, lit: Option<usize>) -> Image<'static> {
             } else {
                 2
             };
-            let level = if lit == Some(k) { 1.0 } else { DIM };
             let a = &mut rgba[(y * w + x) * 4 + 3];
-            *a = (f32::from(*a) / BASE_OPACITY[k] * level).min(255.0) as u8;
+            *a = (f32::from(*a) / BASE_OPACITY[k] * levels[k]).min(255.0) as u8;
         }
     }
     Image::new_owned(rgba, w as u32, h as u32)
@@ -160,11 +220,15 @@ fn frame(base: &Image<'_>, lit: Option<usize>) -> Image<'static> {
 
 fn set_icon(app: &AppHandle, icon: Image<'static>, template: bool) {
     if let Some(tray) = app.tray_by_id("main") {
-        let _ = tray.set_icon(Some(icon));
+        // On macOS a plain `set_icon` resets the template flag, so setting it
+        // afterwards makes every frame flash untinted. Set both at once.
         #[cfg(target_os = "macos")]
-        let _ = tray.set_icon_as_template(template);
+        let _ = tray.set_icon_with_as_template(Some(icon), template);
         #[cfg(not(target_os = "macos"))]
-        let _ = template;
+        {
+            let _ = tray.set_icon(Some(icon));
+            let _ = template;
+        }
     }
 }
 
@@ -175,15 +239,31 @@ pub fn animate_while_running(app: &AppHandle) {
     }
     let app = app.clone();
     thread::spawn(move || {
+        let (base, template) = tray_icon(&app);
+        let frames: Vec<_> = (0..FRAMES)
+            .map(|i| frame(&base, levels(i as f32 / FRAMES as f32)))
+            .collect();
+        let alert: Vec<_> = (0..FRAMES)
+            .map(|i| {
+                let t = i as f32 / FRAMES as f32;
+                let level = DIM + (1.0 - DIM) * 0.5 * (1.0 - (std::f32::consts::TAU * t).cos());
+                frame(&base, [level; 3])
+            })
+            .collect();
         let mut step = 0;
         while app.state::<Runner>().is_running() {
-            let (base, template) = tray_icon(&app);
-            set_icon(&app, frame(&base, SWEEP[step % SWEEP.len()]), template);
+            let set = if WAITING.load(Ordering::SeqCst) {
+                &alert
+            } else {
+                &frames
+            };
+            set_icon(&app, set[step % FRAMES].clone(), template);
             step += 1;
             thread::sleep(FRAME);
         }
         let (icon, template) = tray_icon(&app);
         set_icon(&app, icon, template);
+        WAITING.store(false, Ordering::SeqCst);
         ANIMATING.store(false, Ordering::SeqCst);
     });
 }
