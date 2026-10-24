@@ -22,7 +22,7 @@ The app shows this file in Settings.
 - Escape during a run or preview asks "Stop this update?" before stopping it (Keep running is the default). While you're typing in the terminal, Escape goes to the terminal instead.
 - Past runs open as a sub-page with a breadcrumb and a Back button that returns to where you came from (History or Overview); Escape, the mouse back button and Alt+← (⌘[ on macOS) work too.
 - The app calls itself "Topgrade GUI" throughout, to keep it apart from topgrade, the tool it runs.
-- No separate title bar: the app's header is the title bar (drag to move, double-click to maximize). Linux gets the app's own minimize, maximize and close buttons; macOS keeps its native window buttons, centred in the header.
+- No separate title bar: the app's header is the title bar (drag to move, double-click to maximize). Linux gets the app's own minimize, maximize and close buttons; macOS keeps its native window buttons, centred in the header, and shows only the logo there (the menu bar already names the app).
 
 ## 0.5.0 - 2026-10-24
 
