@@ -31,9 +31,12 @@ fn start_run(
     rows: u16,
     on_stream: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
+    let tray_app = app.clone();
     runner.start(flags, cols, rows, &state.log_dir(), on_stream, move || {
         tray::refresh(&app)
-    })
+    })?;
+    tray::animate_while_running(&tray_app);
+    Ok(())
 }
 
 /// Saved runs, newest first.

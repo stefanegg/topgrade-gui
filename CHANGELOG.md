@@ -6,6 +6,9 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+### Added
+- The tray icon animates while a run is active: a glow climbs through the arrows.
+
 ## 0.4.4 - 2026-10-23
 
 ### Fixed

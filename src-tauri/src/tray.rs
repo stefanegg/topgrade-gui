@@ -1,6 +1,7 @@
 //! Tray icon, window show/hide, and the "update overdue" reminder.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -12,6 +13,7 @@ use tauri::{AppHandle, Emitter, Manager, Wry};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::history::{self, RunSummary};
+use crate::runner::Runner;
 use crate::settings::Settings;
 use crate::updater;
 use crate::window_state;
@@ -119,6 +121,65 @@ pub fn update_icon(app: &AppHandle) {
     if let Some(tray) = app.tray_by_id("main") {
         let _ = tray.set_icon(Some(tray_icon(app).0));
     }
+}
+
+/// Time each animation frame is shown.
+const FRAME: Duration = Duration::from_millis(220);
+/// Which chevron is lit in each frame (0 = top, 2 = bottom; `None` = all
+/// dim): the glow climbs from the bottom arrow to the top one.
+const SWEEP: [Option<usize>; 4] = [Some(2), Some(1), Some(0), None];
+/// Alpha the chevrons were drawn with in the static icon (top, middle, bottom).
+const BASE_OPACITY: [f32; 3] = [0.9, 0.67, 0.43];
+const DIM: f32 = 0.3;
+
+static ANIMATING: AtomicBool = AtomicBool::new(false);
+
+/// Redraws the static icon with only chevron `lit` at full strength.
+fn frame(base: &Image<'_>, lit: Option<usize>) -> Image<'static> {
+    let (w, h) = (base.width() as usize, base.height() as usize);
+    let mut rgba = base.rgba().to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            // The chevrons are parallel 45° lines about the icon's centre
+            // column, so `v` is constant along one and picks it out.
+            let v = y as f32 - (x as f32 - w as f32 / 2.0 + 0.5).abs();
+            let k = if v < 9.0 { 0 } else if v < 18.0 { 1 } else { 2 };
+            let level = if lit == Some(k) { 1.0 } else { DIM };
+            let a = &mut rgba[(y * w + x) * 4 + 3];
+            *a = (f32::from(*a) / BASE_OPACITY[k] * level).min(255.0) as u8;
+        }
+    }
+    Image::new_owned(rgba, w as u32, h as u32)
+}
+
+fn set_icon(app: &AppHandle, icon: Image<'static>, template: bool) {
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_icon(Some(icon));
+        #[cfg(target_os = "macos")]
+        let _ = tray.set_icon_as_template(template);
+        #[cfg(not(target_os = "macos"))]
+        let _ = template;
+    }
+}
+
+/// Animates the tray icon while a run is active, then restores it.
+pub fn animate_while_running(app: &AppHandle) {
+    if ANIMATING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    thread::spawn(move || {
+        let mut step = 0;
+        while app.state::<Runner>().is_running() {
+            let (base, template) = tray_icon(&app);
+            set_icon(&app, frame(&base, SWEEP[step % SWEEP.len()]), template);
+            step += 1;
+            thread::sleep(FRAME);
+        }
+        let (icon, template) = tray_icon(&app);
+        set_icon(&app, icon, template);
+        ANIMATING.store(false, Ordering::SeqCst);
+    });
 }
 
 pub fn show_window(app: &AppHandle) {
