@@ -14,7 +14,7 @@ pub struct Settings {
     pub remind_after_days: u32,
     /// Start hidden in the tray at login.
     pub autostart: bool,
-    /// Default flags, also used by the tray's "Run now".
+    /// Default flags, also used by the tray's "Update everything".
     pub cleanup: bool,
     pub assume_yes: bool,
     /// Terminal font size in px.
