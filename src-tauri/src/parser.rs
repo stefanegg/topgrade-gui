@@ -297,11 +297,7 @@ impl State {
         let line = self.line.trim_end();
         let prompt = if line.ends_with("(y)es/(N)o/(s)hell/(q)uit") {
             PromptKind::Retry
-        } else if line.ends_with("(Y)es/(N)o")
-            // Package managers' own confirmations (dnf, apt, …).
-            || line.ends_with("[y/N]:")
-            || line.ends_with("[Y/n]:")
-        {
+        } else if line.ends_with("(Y)es/(N)o") || is_yes_no_confirmation(line) {
             PromptKind::YesNo
         } else if line.to_lowercase().ends_with("password:")
             || (line.starts_with("[sudo]") && line.ends_with(':'))
@@ -313,6 +309,16 @@ impl State {
         self.prompt_reported = true;
         Some(prompt)
     }
+}
+
+/// Package managers' own confirmations, in any capitalisation and with or
+/// without a trailing colon or question mark: dnf `Is this ok [y/N]:`, apt `Do you want to
+/// continue? [Y/n]`, Homebrew `Do you want to proceed with the upgrade? [y/n]`.
+fn is_yes_no_confirmation(line: &str) -> bool {
+    let line = line.trim_end_matches([':', '?']).trim_end();
+    let tail = line.get(line.len().saturating_sub(5)..).unwrap_or("");
+    let tail = tail.to_ascii_lowercase();
+    tail == "[y/n]" || tail == "(y/n)"
 }
 
 impl vte::Perform for State {
@@ -678,6 +684,28 @@ mod tests {
     }
 
     #[test]
+    fn package_manager_confirmations_detected() {
+        for line in [
+            "Is this ok [y/N]: ",
+            "Do you want to continue? [Y/n] ",
+            "==> Do you want to proceed with the upgrade? [y/n] ",
+            "\x1b[1m==>\x1b[0m Do you want to proceed with the upgrade? [y/n]",
+            "Proceed (y/n)? ",
+        ] {
+            let events = Parser::default().feed(line.as_bytes());
+            assert_eq!(
+                events.last().map(|(_, e)| e),
+                Some(&ParseEvent::Prompt {
+                    prompt: PromptKind::YesNo
+                }),
+                "{line:?}"
+            );
+        }
+        // Mentioning the choice mid-line isn't a prompt.
+        assert!(Parser::default().feed(b"Answer [y/n] below").is_empty());
+    }
+
+    #[test]
     fn event_offsets_point_after_trigger() {
         let input = b"before\n\x1b]0;Topgrade - Foo\x07\r\n\xe2\x94\x80\xe2\x94\x80 Foo \xe2\x94\x80\xe2\x94\x80\r\n";
         let events = Parser::default().feed(input);
@@ -799,16 +827,11 @@ mod tests {
             b"Is this ok [y/N]: ",
             b"Do you want to continue? [Y/n] :",
         ] {
-            let expected = if input.ends_with(b"n] :") {
-                vec![]
-            } else {
-                vec![ParseEvent::Prompt {
-                    prompt: PromptKind::YesNo,
-                }]
-            };
             assert_eq!(
                 events(input),
-                expected,
+                [ParseEvent::Prompt {
+                    prompt: PromptKind::YesNo,
+                }],
                 "{}",
                 String::from_utf8_lossy(input)
             );
