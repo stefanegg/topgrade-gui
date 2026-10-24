@@ -6,15 +6,19 @@
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import "@xterm/xterm/css/xterm.css";
-  import Sidebar from "$lib/Sidebar.svelte";
+  import "../app.css";
+  import Logo from "$lib/Logo.svelte";
+  import Home from "$lib/Home.svelte";
+  import RunProgress from "$lib/RunProgress.svelte";
+  import Results from "$lib/Results.svelte";
   import HistoryList from "$lib/HistoryList.svelte";
   import SettingsPanel from "$lib/SettingsPanel.svelte";
+  import { applyTheme } from "$lib/theme";
   import {
-    formatAgo,
-    formatDate,
     isDryRun,
     runTotals,
     formatDuration,
+    type PromptKind,
     type RunSummary,
     type Settings,
     type Step,
@@ -27,8 +31,11 @@
   let term: Terminal;
   let fit: FitAddon;
 
+  type View = "overview" | "history" | "settings";
+  let view = $state<View>("overview");
+
   let running = $state(false);
-  let status = $state("Idle");
+  let stopping = $state(false);
   let cleanup = $state(false);
   let assumeYes = $state(false);
   let dryRun = $state(false);
@@ -37,23 +44,25 @@
   let unmatched = $state<UnmatchedResult[]>([]);
   let degraded = $state(false);
   let now = $state(Date.now());
-  let totals = $derived(runTotals(steps));
   let logPath = $state<string | null>(null);
   let receivedOutput = false;
   let summarySeen = false;
-  let runIsDry = false;
-  let runStartedAt = 0;
-  /** How the live run ended; shown as a banner and a footer in the terminal. */
-  let outcome = $state<{ ok: boolean; text: string } | null>(null);
+  let runIsDry = $state(false);
+  let runStartedAt = $state(0);
+  let runEndedAt = $state<number | null>(null);
+  /** Why the live run didn't end cleanly; null while running or when it did. */
+  let problem = $state<string | null>(null);
+  /** The question topgrade is waiting on, if any. */
+  let prompt = $state<PromptKind | null>(null);
+  /** Errors outside a run (couldn't start, couldn't save settings, …). */
+  let notice = $state<string | null>(null);
 
   let history = $state<RunSummary[]>([]);
-  let showHistory = $state(false);
   /** Saved run being replayed read-only; `null` for live runs. */
   let viewing = $state<RunSummary | null>(null);
   let lastRun = $derived(history.find((r) => !isDryRun(r)));
 
   let settings = $state<Settings | null>(null);
-  let showSettings = $state(false);
   let version = $state("");
 
   let update = $state<UpdateInfo | null>(null);
@@ -62,6 +71,40 @@
   let checkingUpdate = $state(false);
   let installing = $state(false);
   let downloadPercent = $state<number | null>(null);
+
+  const TERMINAL_OPEN_KEY = "terminalOpen";
+  let terminalOpen = $state(readTerminalOpen());
+
+  type Phase = "home" | "running" | "results";
+  let phase = $derived<Phase>(
+    viewing ? "results" : running ? "running" : steps.length > 0 || runEndedAt !== null ? "results" : "home",
+  );
+
+  /** Step count of the last run of the same kind, for the progress estimate. */
+  let expectedSteps = $derived(history.find((r) => isDryRun(r) === runIsDry)?.steps.length ?? null);
+
+  function readTerminalOpen(): boolean {
+    try {
+      return localStorage.getItem(TERMINAL_OPEN_KEY) === "true";
+    } catch {
+      return false;
+    }
+  }
+
+  function setTerminalOpen(open: boolean) {
+    terminalOpen = open;
+    try {
+      localStorage.setItem(TERMINAL_OPEN_KEY, String(open));
+    } catch {
+      // Not remembered; fine.
+    }
+    if (open) {
+      term.scrollToBottom();
+      term.focus();
+    } else {
+      term.blur();
+    }
+  }
 
   async function checkForUpdate() {
     checkingUpdate = true;
@@ -85,11 +128,11 @@
       // Returns only if a run started during the download.
       installing = false;
       updateMessage = "Update installed. It takes effect when the app restarts after this run.";
-      status = updateMessage;
+      notice = updateMessage;
     } catch (err) {
       installing = false;
       updateMessage = `Update failed: ${err}`;
-      status = updateMessage;
+      notice = updateMessage;
     }
   }
 
@@ -99,6 +142,7 @@
       cleanup = settings.cleanup;
       assumeYes = settings.assumeYes;
       setFontSize(settings.fontSize, false);
+      applyTheme(settings.theme);
     }
   }
 
@@ -130,14 +174,20 @@
   function updateSettings(patch: Partial<Settings>) {
     if (!settings) return;
     settings = { ...settings, ...patch };
-    invoke("set_settings", { settings }).catch((err) => (status = `Couldn't save settings: ${err}`));
+    if (patch.theme) applyTheme(patch.theme);
+    invoke("set_settings", { settings }).catch((err) => (notice = `Couldn't save settings: ${err}`));
+  }
+
+  function setOptions(patch: { cleanup?: boolean; assumeYes?: boolean }) {
+    if (patch.cleanup !== undefined) cleanup = patch.cleanup;
+    if (patch.assumeYes !== undefined) assumeYes = patch.assumeYes;
+    updateSettings(patch);
   }
 
   /** Tray "Run now": start with the saved flags unless a run is active. */
   function runFromTray() {
     if (running) return;
-    showHistory = false;
-    showSettings = false;
+    view = "overview";
     dryRun = false;
     run();
   }
@@ -171,7 +221,6 @@
         logPath = e.logPath;
         runStartedAt = Date.now();
         running = true;
-        status = viewing ? "Loading…" : "Running…";
         break;
       case "stepStarted": {
         finishRunningSteps(e.group);
@@ -214,12 +263,13 @@
       case "prompt": {
         const step = steps.at(-1);
         if (step) step.needsInput = true;
-        status = e.prompt === "password" ? "Waiting for password…" : "Waiting for input…";
         if (!viewing) {
+          prompt = e.prompt;
           waitingForInput = true;
           invoke("set_waiting_input", { waiting: true, password: e.prompt === "password" }).catch(() => {});
+          // The password card takes focus itself; other questions are answered in the terminal.
+          if (terminalOpen && e.prompt !== "password") term.focus();
         }
-        term.focus();
         break;
       }
       case "exited":
@@ -231,22 +281,21 @@
         degraded = receivedOutput && steps.length === 0;
         if (viewing) {
           applySavedDurations(viewing);
-          status = "";
           break;
         }
-        status =
-          e.kind === "error"
-            ? `Error: ${e.message}`
-            : e.code === 0
-              ? "Finished"
-              : `Exited with code ${e.code}`;
-        showOutcome(e);
+        runEndedAt = Date.now();
+        if (e.kind === "error") problem = `The run failed: ${e.message}`;
+        else if (stopping) problem = "You stopped the run before it finished.";
+        else if (e.code !== 0) problem = `Topgrade ended with exit code ${e.code}.`;
+        stopping = false;
+        writeFooter(e);
         loadHistory();
         break;
     }
   }
 
-  function showOutcome(e: StreamEvent & { kind: "exited" | "error" }) {
+  /** A coloured line at the end of the terminal output saying how the run went. */
+  function writeFooter(e: StreamEvent & { kind: "exited" | "error" }) {
     const t = runTotals(steps);
     const took = formatDuration(Date.now() - runStartedAt);
     const failed = t.failed > 0 ? ` · ${t.failed} failed` : "";
@@ -256,9 +305,7 @@
     else if (e.code !== 0) text = `Run ended with exit code ${e.code} · ${took}${failed}`;
     else text = `Run finished · ${updated}${failed} · ${took}`;
     const ok = e.kind === "exited" && e.code === 0 && t.failed === 0;
-    outcome = { ok, text };
-    const color = ok ? "32" : "31";
-    term.write(`\r\n\x1b[1;${color}m━━ ${text} ━━\x1b[0m\r\n`);
+    term.write(`\r\n\x1b[1;${ok ? "32" : "31"}m━━ ${text} ━━\x1b[0m\r\n`);
   }
 
   // topgrade omits a step from its summary when the step aborts during a dry
@@ -288,11 +335,17 @@
   let waitingForInput = false;
 
   function clearInputRequests() {
+    prompt = null;
     if (waitingForInput) {
       waitingForInput = false;
       invoke("set_waiting_input", { waiting: false, password: false }).catch(() => {});
     }
     for (const step of steps) step.needsInput = false;
+  }
+
+  function sendPassword(password: string) {
+    clearInputRequests();
+    invoke("write_input", { data: `${password}\r` }).catch(() => {});
   }
 
   async function run() {
@@ -301,38 +354,44 @@
     await start("start_run", { flags: flags(), cols: term.cols, rows: term.rows });
   }
 
+  function runFromHome(preview: boolean) {
+    dryRun = preview;
+    run();
+  }
+
   async function replay(name: string) {
     viewing = null;
     runIsDry = name.includes("dry-run");
+    view = "overview";
     await start("replay_fixture", { name });
   }
 
   async function openRun(saved: RunSummary) {
-    showHistory = false;
+    view = "overview";
     viewing = saved;
     runIsDry = isDryRun(saved);
     await start("replay_run", { id: saved.id });
   }
 
-  function closeRun() {
-    viewing = null;
-    outcome = null;
+  function resetRun() {
     term.reset();
     steps = [];
     unmatched = [];
     degraded = false;
     logPath = null;
-    status = "Idle";
+    runEndedAt = null;
+    problem = null;
+  }
+
+  function closeRun() {
+    viewing = null;
+    resetRun();
   }
 
   async function start(command: string, args: Record<string, unknown>) {
-    outcome = null;
-    term.reset();
+    resetRun();
+    notice = null;
     fit.fit();
-    steps = [];
-    unmatched = [];
-    degraded = false;
-    logPath = null;
     receivedOutput = false;
     summarySeen = false;
 
@@ -351,20 +410,20 @@
 
     try {
       await invoke(command, { ...args, onStream });
-      term.focus();
+      if (terminalOpen) term.focus();
     } catch (err) {
-      status = `Failed to start: ${err}`;
+      notice = `Couldn't start topgrade: ${err}`;
     }
   }
 
   async function stop() {
-    status = "Stopping…";
+    stopping = true;
     await invoke("stop_run").catch(() => {});
   }
 
   function jumpTo(step: Step) {
+    if (!terminalOpen) setTerminalOpen(true);
     if (step.marker && step.marker.line >= 0) term.scrollToLine(step.marker.line);
-    term.focus();
   }
 
   onMount(() => {
@@ -374,7 +433,7 @@
       fontFamily: "Menlo, 'DejaVu Sans Mono', monospace",
       fontSize: 13,
       scrollback: 50000,
-      theme: { background: "#1e1e1e" },
+      theme: { background: "#14181c" },
     });
     fit = new FitAddon();
     term.loadAddon(fit);
@@ -385,13 +444,14 @@
     term.onData((data) => {
       if (!running || viewing) return;
       clearInputRequests();
-      if (status.startsWith("Waiting")) status = "Running…";
       invoke("write_input", { data }).catch(() => {});
     });
     term.onResize(({ cols, rows }) => {
       invoke("resize_pty", { cols, rows }).catch(() => {});
     });
 
+    // The terminal keeps its size while the drawer is closed, so the PTY
+    // (and topgrade's line wrapping) doesn't change when it is toggled.
     const observer = new ResizeObserver(() => fit.fit());
     observer.observe(termEl);
     const clock = setInterval(() => (now = Date.now()), 1000);
@@ -405,9 +465,8 @@
         updateDismissed = false;
       }),
       listen("update-requested", async () => {
-        showHistory = false;
         await checkForUpdate();
-        if (!update) showSettings = true;
+        if (!update) view = "settings";
       }),
       listen<{ downloaded: number; total: number | null }>("update-progress", (e) => {
         const { downloaded, total } = e.payload;
@@ -425,32 +484,33 @@
   });
 </script>
 
-<main>
-  <header>
-    <button class="primary" onclick={run} disabled={running}>Run</button>
-    <button onclick={stop} disabled={!running || viewing !== null}>Stop</button>
-    <label title="Also delete temporary files and old leftovers after updating (topgrade --cleanup)">
-      <input
-        type="checkbox"
-        bind:checked={cleanup}
-        disabled={running}
-        onchange={(e) => updateSettings({ cleanup: e.currentTarget.checked })}
-      /> Clean up afterwards
-    </label>
-    <label title="Answer yes to confirmation questions so the run doesn't wait for you (topgrade -y)">
-      <input
-        type="checkbox"
-        bind:checked={assumeYes}
-        disabled={running}
-        onchange={(e) => updateSettings({ assumeYes: e.currentTarget.checked })}
-      /> Don't ask for confirmation
-    </label>
-    <label title="Only show what would be updated, without changing anything (topgrade --dry-run)">
-      <input type="checkbox" bind:checked={dryRun} disabled={running} /> Preview only (dry run)
-    </label>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <Logo size={26} />
+      <span>Topgrade</span>
+    </div>
+    <nav aria-label="Main">
+      <button aria-current={view === "overview" ? "page" : undefined} onclick={() => (view = "overview")}>
+        Overview
+        {#if running && view !== "overview"}<span class="dot" title="A run is in progress"></span>{/if}
+      </button>
+      <button aria-current={view === "history" ? "page" : undefined} onclick={() => (view = "history")}>
+        History
+      </button>
+      <button
+        aria-current={view === "settings" ? "page" : undefined}
+        onclick={() => (view = "settings")}
+        disabled={!settings}
+      >
+        Settings
+      </button>
+    </nav>
     {#if import.meta.env.DEV}
       <select
+        class="dev"
         disabled={running}
+        aria-label="Replay fixture"
         onchange={(e) => {
           const select = e.currentTarget;
           if (select.value) replay(select.value);
@@ -463,90 +523,34 @@
         <option>macos-dry-run.log</option>
       </select>
     {/if}
-    <button
-      onclick={() => {
-        showHistory = !showHistory;
-        showSettings = false;
-      }}
-      disabled={running}
-      class:active={showHistory}
-    >
-      History
-    </button>
-    <button
-      onclick={() => {
-        showSettings = !showSettings;
-        showHistory = false;
-      }}
-      class:active={showSettings}
-      disabled={!settings}
-    >
-      Settings
-    </button>
-    <span class="status">
-      {#if status === "Idle" && lastRun}
-        Last run: {formatAgo(lastRun.startedAt, now)}
-      {:else}
-        {status}
-      {/if}
-    </span>
-    {#if logPath}
-      <button onclick={() => revealItemInDir(logPath!)} title={logPath}>Show log</button>
-    {/if}
   </header>
+
   {#if update && !updateDismissed}
-    <div class="update">
-      Topgrade GUI {update.version} is available.
+    <div class="banner info">
+      <span>Topgrade GUI {update.version} is available.</span>
       {#if installing}
-        {downloadPercent === null ? "Installing…" : `Downloading… ${downloadPercent}%`}
+        <span>{downloadPercent === null ? "Installing…" : `Downloading… ${downloadPercent}%`}</span>
       {:else}
-        <span class="actions">
-          <button class="primary" onclick={installUpdate} disabled={running} title={running ? "Wait for the run to finish" : ""}>
+        <span class="banner-actions">
+          <button class="btn primary" onclick={installUpdate} disabled={running} title={running ? "Wait for the run to finish" : ""}>
             Install and restart
           </button>
-          <button onclick={() => (updateDismissed = true)}>Later</button>
+          <button class="btn" onclick={() => (updateDismissed = true)}>Later</button>
         </span>
       {/if}
     </div>
   {/if}
-  {#if viewing}
-    <div class="viewing">
-      Viewing run from {formatDate(viewing.startedAt)}
-      {#if isDryRun(viewing)}(dry run){/if} · read-only
-      <button onclick={closeRun}>Close</button>
+  {#if notice}
+    <div class="banner warn">
+      <span>{notice}</span>
+      <span class="banner-actions"><button class="btn" onclick={() => (notice = null)}>Dismiss</button></span>
     </div>
   {/if}
-  {#if outcome}
-    <div class="outcome" class:ok={outcome.ok} class:bad={!outcome.ok}>
-      <span>{outcome.ok ? "✓" : "✗"} {outcome.text}</span>
-      <button onclick={() => (outcome = null)}>Dismiss</button>
-    </div>
-  {/if}
-  {#if steps.length > 0}
-    <div class="totals" class:has-failed={totals.failed > 0}>
-      {#if totals.updated > 0}
-        <strong>{totals.updated}</strong> updated across {totals.stepsWithUpdates}
-        {totals.stepsWithUpdates === 1 ? "step" : "steps"}
-      {:else if running}
-        Nothing updated yet
-      {:else}
-        Nothing updated
-      {/if}
-      {#if totals.failed > 0}
-        · <span class="failed">{totals.failed} failed</span>
-      {/if}
-    </div>
-  {/if}
-  {#if degraded}
-    <div class="banner">
-      Couldn't detect topgrade steps in the output — parsing degraded, showing raw output only.
-    </div>
-  {/if}
-  <div class="body">
-    {#if showHistory}
-      <HistoryList runs={history} {now} onopen={openRun} onclose={() => (showHistory = false)} />
-    {/if}
-    {#if showSettings && settings}
+
+  <main class="content">
+    {#if view === "history"}
+      <HistoryList runs={history} {now} disabled={running} onopen={openRun} />
+    {:else if view === "settings" && settings}
       <SettingsPanel
         {settings}
         {version}
@@ -556,167 +560,264 @@
         oncheckupdate={checkForUpdate}
         oninstallupdate={installUpdate}
         {installing}
-        onchange={updateSettings} onclose={() => (showSettings = false)} />
+        onchange={updateSettings}
+      />
+    {:else if phase === "home"}
+      <Home
+        {lastRun}
+        remindAfterDays={settings?.remindAfterDays ?? 7}
+        {now}
+        {cleanup}
+        {assumeYes}
+        onoptions={setOptions}
+        onrun={runFromHome}
+        onopenrun={openRun}
+      />
+    {:else if phase === "running"}
+      <RunProgress
+        {steps}
+        {now}
+        startedAt={runStartedAt}
+        dryRun={runIsDry}
+        {expectedSteps}
+        {prompt}
+        {stopping}
+        onstop={stop}
+        onpassword={sendPassword}
+        onshowterminal={() => setTerminalOpen(true)}
+        onselect={jumpTo}
+      />
+    {:else}
+      <Results
+        {steps}
+        {unmatched}
+        {now}
+        startedAt={viewing ? viewing.startedAt : new Date(runStartedAt).toISOString()}
+        durationMs={viewing
+          ? viewing.durationSecs * 1000 || null
+          : runEndedAt !== null
+            ? runEndedAt - runStartedAt
+            : null}
+        dryRun={runIsDry}
+        saved={viewing !== null}
+        loading={viewing !== null && running}
+        problem={viewing
+          ? viewing.exitCode !== null && viewing.exitCode !== 0
+            ? `Topgrade ended with exit code ${viewing.exitCode}.`
+            : null
+          : problem}
+        {degraded}
+        {logPath}
+        ondone={closeRun}
+        onshowlog={() => logPath && revealItemInDir(logPath)}
+        onshowterminal={() => setTerminalOpen(true)}
+        onselect={jumpTo}
+      />
     {/if}
-    <Sidebar {steps} {unmatched} {now} onselect={jumpTo} />
-    <div class="terminal" bind:this={termEl}></div>
-  </div>
-</main>
+  </main>
+
+  <section class="drawer" class:hidden={view !== "overview"} aria-label="Terminal">
+    <div class="drawer-bar">
+      <button class="drawer-toggle" aria-expanded={terminalOpen} onclick={() => setTerminalOpen(!terminalOpen)}>
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" class:open={terminalOpen}><path d="M18 15l-6-6-6 6" /></svg>
+        Terminal output
+      </button>
+      <span class="muted drawer-hint">
+        {#if viewing}
+          Saved output, read-only
+        {:else if running && terminalOpen}
+          You can type here too · Shift + scroll to zoom
+        {/if}
+      </span>
+      {#if logPath && phase !== "results"}
+        <button class="link-button" onclick={() => revealItemInDir(logPath!)} title={logPath}>Show log file</button>
+      {/if}
+    </div>
+    <div class="drawer-body" class:open={terminalOpen}>
+      <div class="terminal" bind:this={termEl}></div>
+    </div>
+  </section>
+</div>
 
 <style>
-  :global(html, body) {
-    margin: 0;
-    height: 100%;
-    background: #1e1e1e;
-    color: #ddd;
-    font-family: -apple-system, "Segoe UI", "Noto Sans", sans-serif;
-    font-size: 13px;
-  }
-
-  main {
+  .app {
     display: flex;
     flex-direction: column;
     height: 100vh;
   }
 
-  header {
+  .topbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
-    padding: 8px 12px;
-    background: #2a2a2a;
-    border-bottom: 1px solid #3a3a3a;
+    gap: 16px;
+    padding: 10px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
   }
 
-  label {
+  .brand {
     display: flex;
     align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  nav {
+    display: flex;
     gap: 4px;
+    flex: 1;
   }
 
-  button {
-    padding: 4px 14px;
+  nav button {
+    position: relative;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 0;
     border-radius: 6px;
-    border: 1px solid #555;
-    background: #3a3a3a;
-    color: inherit;
+    background: none;
+    color: var(--muted);
     font: inherit;
     cursor: pointer;
   }
 
-  button.primary {
-    background: #2f6fd6;
-    border-color: #2f6fd6;
+  nav button:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface-2);
   }
 
-  button:disabled {
-    opacity: 0.4;
+  nav button[aria-current="page"] {
+    background: var(--accent-soft);
+    color: var(--link);
+    font-weight: 600;
+  }
+
+  nav button:disabled {
+    opacity: 0.45;
     cursor: default;
   }
 
-  .status {
-    margin-left: auto;
-    color: #999;
+  .dot {
+    position: absolute;
+    top: 6px;
+    right: 4px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
   }
 
-  .totals {
-    padding: 6px 12px;
-    background: #232a23;
-    border-bottom: 1px solid #3a3a3a;
-    color: #bbb;
-  }
-
-  .totals strong {
-    color: #4caf50;
-  }
-
-  .totals.has-failed {
-    background: #2e2222;
-  }
-
-  .totals .failed {
-    color: #e5534b;
-    font-weight: bold;
-  }
-
-  .outcome {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    font-weight: bold;
-    border-bottom: 1px solid;
-  }
-
-  .outcome button {
-    margin-left: auto;
-    font-weight: normal;
-  }
-
-  .outcome.ok {
-    background: #1d3524;
-    color: #7fe09a;
-    border-color: #2f6140;
-  }
-
-  .outcome.bad {
-    background: #3a2222;
-    color: #f08a84;
-    border-color: #6b3030;
-  }
-
-  .viewing {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    background: #1f2a3a;
-    color: #9ec2f0;
-    border-bottom: 1px solid #2f4466;
-  }
-
-  .viewing button {
-    margin-left: auto;
-  }
-
-  button.active {
-    background: #555;
-  }
-
-  .update {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    background: #1d3524;
-    color: #9fdcb0;
-    border-bottom: 1px solid #2f6140;
-  }
-
-  .update .actions {
-    margin-left: auto;
-    display: flex;
-    gap: 8px;
+  .dev {
+    min-height: 32px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
   }
 
   .banner {
-    padding: 6px 12px;
-    background: #4a3b12;
-    color: #f0d68a;
-    border-bottom: 1px solid #6b5520;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 8px 24px;
+    border-bottom: 1px solid;
   }
 
-  .body {
-    position: relative;
+  .banner.info {
+    background: var(--accent-soft);
+    border-color: var(--border);
+  }
+
+  .banner.warn {
+    background: var(--warn-soft);
+    border-color: var(--warn-border);
+    color: var(--warn-text);
+  }
+
+  .banner-actions {
+    margin-left: auto;
     display: flex;
+    gap: 8px;
+  }
+
+  .content {
     flex: 1;
     min-height: 0;
+    overflow-y: auto;
+  }
+
+  .drawer {
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  /* Collapsed rather than display: none, so xterm keeps its size (and
+     the PTY its columns) on the History and Settings pages. */
+  .drawer.hidden {
+    height: 0;
+    overflow: hidden;
+    border: 0;
+  }
+
+  .drawer-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 24px;
+  }
+
+  .drawer-toggle {
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .drawer-toggle svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform 0.15s;
+  }
+
+  .drawer-toggle svg.open {
+    transform: rotate(180deg);
+  }
+
+  .drawer-hint {
+    flex: 1;
+    font-size: 12px;
+  }
+
+  .drawer-body {
+    height: 0;
+    overflow: hidden;
+    background: var(--term-bg);
+  }
+
+  .drawer-body.open {
+    height: var(--drawer-height);
   }
 
   .terminal {
-    flex: 1;
-    min-width: 0;
-    min-height: 0;
-    padding: 6px;
+    height: var(--drawer-height);
+    box-sizing: border-box;
+    padding: 8px 12px;
+  }
+
+  .app {
+    --drawer-height: min(380px, 45vh);
   }
 </style>

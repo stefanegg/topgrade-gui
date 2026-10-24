@@ -21,6 +21,18 @@ pub struct Settings {
     pub font_size: u32,
     /// Look for new releases in the background (every few hours).
     pub auto_check_updates: bool,
+    /// Colour scheme of the window.
+    pub theme: Theme,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+    /// Follow the desktop's light/dark preference.
+    #[default]
+    System,
+    Light,
+    Dark,
 }
 
 impl Default for Settings {
@@ -32,6 +44,7 @@ impl Default for Settings {
             assume_yes: false,
             font_size: 13,
             auto_check_updates: true,
+            theme: Theme::System,
         }
     }
 }
@@ -73,6 +86,7 @@ mod tests {
         assert_eq!(load(&dir), (Settings::default(), false));
         let settings = Settings {
             remind_after_days: 3,
+            theme: Theme::Dark,
             ..Settings::default()
         };
         save(&dir, &settings).unwrap();
