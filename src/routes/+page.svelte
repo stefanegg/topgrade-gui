@@ -710,9 +710,11 @@
     font-size: 15px;
   }
 
-  /* Room for the macOS traffic lights (overlay title bar). */
+  /* Room for the macOS traffic lights (overlay title bar). Their vertical
+     position (trafficLightPosition in tauri.macos.conf.json) is tuned to
+     this header's height; change both together. */
   .topbar.mac {
-    padding-left: 84px;
+    padding-left: 96px;
     padding-right: 24px;
   }
 

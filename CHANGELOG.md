@@ -18,7 +18,7 @@ The app shows this file in Settings.
 - The app's own logo and colours are used throughout.
 - Past runs open as a sub-page with a breadcrumb and a Back button that returns to where you came from (History or Overview); the mouse back button and Alt+← (⌘[ on macOS) work too.
 - The app calls itself "Topgrade GUI" throughout, to keep it apart from topgrade, the tool it runs.
-- No separate title bar: the app's header is the title bar (drag to move, double-click to maximize). Linux gets the app's own minimize, maximize and close buttons; macOS keeps its native window buttons inside the header.
+- No separate title bar: the app's header is the title bar (drag to move, double-click to maximize). Linux gets the app's own minimize, maximize and close buttons; macOS keeps its native window buttons, centred in the header.
 
 ## 0.5.0 - 2026-10-24
 
