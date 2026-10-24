@@ -167,7 +167,7 @@
     <div class="title">
       <h1>{headline}</h1>
       <p class="muted">
-        {saved ? "Saved run from" : "Finished"} {formatDate(startedAt)}
+        {saved ? "Saved run from" : "Started"} {formatDate(startedAt)}
         · {steps.length} {steps.length === 1 ? "step" : "steps"}{failed.length > 0
           ? `, ${failed.length} failed`
           : ", none failed"}
