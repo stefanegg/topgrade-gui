@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { formatAgo, formatDate, summaryTotals, type RunSummary, type StepStatus } from "./run";
-  import { collectChanges, highlightNames, joinNames, sourceName } from "./changes";
+  import { formatAgo, formatDate, summaryTotals, type RunSummary } from "./run";
+  import { collectChanges, highlightNames, joinNames } from "./changes";
 
   interface Props {
     lastRun: RunSummary | undefined;
@@ -38,20 +38,6 @@
     return rest > 0 ? `${names.join(", ")} and ${rest} more` : joinNames(names);
   });
 
-  /** Top-level steps of the last run; a nested run (e.g. inside Toolbx)
-   *  counts toward the top-level step it ran in, the one before it. */
-  let sources = $derived.by(() => {
-    if (!lastRun) return [];
-    const rows: { name: string; count: number; status: StepStatus | null }[] = [];
-    for (const s of lastRun.steps) {
-      const count = s.updates?.items.length ?? 0;
-      if (s.group === null) rows.push({ name: s.name, count, status: s.status });
-      else if (rows.length > 0) rows[rows.length - 1].count += count;
-    }
-    return rows.sort((a, b) => b.count - a.count);
-  });
-
-  const SHOWN_SOURCES = 8;
 </script>
 
 <div class="home">
@@ -121,52 +107,18 @@
       </div>
     {/if}
   </section>
-
-  {#if sources.length > 0}
-    <aside class="card sources">
-      <h2>What topgrade updates</h2>
-      <ul>
-        {#each sources.slice(0, SHOWN_SOURCES) as source}
-          <li>
-            <span class="abbr" aria-hidden="true">{sourceName(source.name).slice(0, 2)}</span>
-            <span class="source-text">
-              <span>{sourceName(source.name)}</span>
-              <span class="muted small">
-                {#if source.status === "failed"}
-                  <span class="failed">Failed last time</span>
-                {:else if source.count > 0}
-                  {source.count} updated last time
-                {:else}
-                  No package changes listed
-                {/if}
-              </span>
-            </span>
-          </li>
-        {/each}
-      </ul>
-      {#if sources.length > SHOWN_SOURCES}
-        <p class="muted small more">and {sources.length - SHOWN_SOURCES} more</p>
-      {/if}
-    </aside>
-  {/if}
 </div>
 
 <style>
   .home {
     width: 100%;
-    max-width: 1120px;
+    max-width: 760px;
     margin: 0 auto;
     box-sizing: border-box;
     padding: 32px 24px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 24px;
-    align-items: flex-start;
   }
 
   .main-col {
-    flex: 999 1 520px;
-    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 24px;
@@ -283,55 +235,4 @@
     color: var(--danger);
   }
 
-  .sources {
-    flex: 1 1 300px;
-    min-width: 0;
-    padding: 20px 0;
-  }
-
-  h2 {
-    margin: 0 24px 12px;
-    font-size: 15px;
-    font-weight: 600;
-  }
-
-  ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  li {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 24px;
-    border-top: 1px solid var(--border-soft);
-  }
-
-  .abbr {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: var(--surface-2);
-    color: var(--muted);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    flex-shrink: 0;
-  }
-
-  .source-text {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .more {
-    margin: 12px 24px 0;
-  }
 </style>
