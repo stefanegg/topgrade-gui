@@ -164,14 +164,23 @@
   <aside class="card sources" aria-labelledby="sources-title">
     <div class="sources-head">
       <h2 id="sources-title">What topgrade updates here</h2>
+      <button
+        class="refresh"
+        class:spinning={detecting}
+        onclick={ondetect}
+        disabled={detecting}
+        aria-label={detecting ? "Checking…" : "Check again"}
+        title={detecting ? "Checking…" : "Check again"}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 12a8 8 0 1 1-2.34-5.66" /><path d="M20 4v5h-5" />
+        </svg>
+      </button>
       {#if sources}
         <span class="muted small meta">
           {sources.names.length} sources · checked {formatAgo(sources.detectedAt, now)}
         </span>
       {/if}
-      <button class="link-button small" onclick={ondetect} disabled={detecting}>
-        {detecting ? "Checking…" : sources ? "Check again" : "Check now"}
-      </button>
     </div>
     {#if sources}
       <ul>
@@ -339,22 +348,63 @@
     gap: 12px;
   }
 
+  /* Title and refresh button on one line, the "checked …" line below. */
   .sources-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 4px 12px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: 8px;
   }
 
   .sources-head h2 {
     margin: 0;
     font-size: 15px;
     font-weight: 600;
-    flex: 1 0 100%;
   }
 
   .sources-head .meta {
-    margin-right: auto;
+    grid-column: 1 / -1;
+  }
+
+  .refresh {
+    width: 32px;
+    height: 32px;
+    margin: -6px -8px -6px 0;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .refresh:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  .refresh:disabled {
+    cursor: default;
+  }
+
+  .refresh svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .refresh.spinning svg {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .sources ul {
@@ -383,12 +433,6 @@
     font-size: 12px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-  }
-
-  .link-button:disabled {
-    color: var(--muted);
-    text-decoration: none;
-    cursor: default;
   }
 
 </style>

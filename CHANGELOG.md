@@ -10,7 +10,7 @@ The app shows this file in Settings.
 - "What changed" page after each run: every updated package with its old and new version, grouped into Apps, System and tools, and Firmware, with a search box, filters and "Copy list". A one-sentence summary names the apps you'll recognise.
 - A "Restart when convenient" note when firmware or core system packages were updated.
 - Password prompts appear as a field in the app; the password is passed to sudo in the terminal and not stored.
-- Overview lists what topgrade updates on this computer, found with a background dry run (changes nothing, needs no password) and refreshed daily or with "Check again". Each source shows how many items it updated in the last run.
+- Overview lists what topgrade updates on this computer, found with a background dry run (changes nothing, needs no password) and refreshed daily or with its refresh button. Each source shows how many items it updated in the last run.
 - Theme setting: System, Light or Dark. On Linux the tray icon keeps following the desktop panel's theme.
 
 ### Changed
