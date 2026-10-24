@@ -6,6 +6,9 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+### Fixed
+- Homebrew's "Do you want to proceed with the upgrade? [y/n]" (and apt's "[Y/n]" without a colon) is now recognised as a question: the app shows "A question from topgrade" and notifies you instead of seeming to hang.
+
 ## 0.6.0 - 2026-10-24
 
 ### Added
