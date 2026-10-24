@@ -715,15 +715,17 @@ mod tests {
 
     #[test]
     fn homebrew_confirmation_ending_in_newline_detected() {
-        let prompt = ParseEvent::Prompt {
-            prompt: PromptKind::YesNo,
-        };
         let question =
             b"\x1b[34m==>\x1b[0m \x1b[1mDo you want to proceed with the upgrade? [y/n]\x1b[0m\r\n";
         let mut parser = Parser::default();
         parser.feed(b"==> Would upgrade 2 outdated packages\r\n");
         let events: Vec<_> = parser.feed(question).into_iter().map(|(_, e)| e).collect();
-        assert_eq!(events, [prompt.clone()]);
+        assert_eq!(
+            events,
+            [ParseEvent::Prompt {
+                prompt: PromptKind::YesNo
+            }]
+        );
         // Not reported again while waiting.
         assert!(parser.feed(b"").is_empty());
 
