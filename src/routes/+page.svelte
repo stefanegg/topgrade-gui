@@ -19,6 +19,7 @@
   import {
     formatDate,
     isDryRun,
+    isFinished,
     runTotals,
     formatDuration,
     type PromptKind,
@@ -65,6 +66,7 @@
    *  sub-page of `view` (History, or Overview's "See what changed"). */
   let viewing = $state<RunSummary | null>(null);
   let lastRun = $derived(history.find((r) => !isDryRun(r)));
+  let lastUpdate = $derived(history.find((r) => !isDryRun(r) && isFinished(r)));
 
   let settings = $state<Settings | null>(null);
   let version = $state("");
@@ -603,6 +605,7 @@
     {:else if phase === "home"}
       <Home
         {lastRun}
+        {lastUpdate}
         remindAfterDays={settings?.remindAfterDays ?? 7}
         {now}
         {cleanup}
@@ -640,9 +643,11 @@
         saved={viewing !== null}
         loading={viewing !== null && running}
         problem={viewing
-          ? viewing.exitCode !== null && viewing.exitCode !== 0
-            ? `The run ended with exit code ${viewing.exitCode}.`
-            : null
+          ? !isFinished(viewing)
+            ? "This run didn't finish: it was stopped before topgrade's summary, so some steps didn't run."
+            : viewing.exitCode !== null && viewing.exitCode !== 0
+              ? `The run ended with exit code ${viewing.exitCode}.`
+              : null
           : problem}
         {degraded}
         {logPath}

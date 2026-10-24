@@ -4,6 +4,7 @@
     formatDate,
     formatDuration,
     isDryRun,
+    isFinished,
     summaryTotals,
     type RunSummary,
   } from "./run";
@@ -52,7 +53,12 @@
             </span>
             <span class="what">
               <span>
-                {#if isDryRun(run)}
+                {#if !isFinished(run)}
+                  <span class="failed">Didn't finish</span>
+                  {#if totals.updated > 0}
+                    · <strong>{totals.updated}</strong> updated before it stopped
+                  {/if}
+                {:else if isDryRun(run)}
                   Preview
                 {:else if totals.updated > 0}
                   <strong>{totals.updated}</strong> {totals.updated === 1 ? "update" : "updates"}
@@ -62,7 +68,7 @@
                 {#if totals.failed > 0}
                   · <span class="failed">{totals.failed} failed</span>
                 {/if}
-                {#if run.exitCode !== null && run.exitCode !== 0}
+                {#if isFinished(run) && run.exitCode !== null && run.exitCode !== 0}
                   · <span class="failed">exit code {run.exitCode}</span>
                 {/if}
               </span>

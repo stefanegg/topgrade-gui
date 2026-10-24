@@ -110,6 +110,12 @@ export function isDryRun(run: RunSummary): boolean {
   return run.flags.includes("--dry-run") || run.flags.includes("-n");
 }
 
+/** Whether topgrade got as far as its closing summary; a stopped or crashed
+ *  run has no step results. Mirrors `RunSummary::is_finished` in history.rs. */
+export function isFinished(run: RunSummary): boolean {
+  return run.steps.some((s) => s.status !== null) || run.unmatched.length > 0;
+}
+
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     weekday: "short",
