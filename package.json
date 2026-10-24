@@ -1,6 +1,6 @@
 {
   "name": "topgrade-gui",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Desktop wrapper for topgrade",
   "type": "module",
   "scripts": {
