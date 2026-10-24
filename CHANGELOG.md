@@ -6,6 +6,8 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+## 0.5.0 - 2026-10-24
+
 ### Added
 - When topgrade waits for input (sudo password, yes/no, retry) the tray icon pulses, and a notification (plus Dock bounce on macOS) appears if the window is not in front.
 - A banner and a coloured footer line in the terminal show when a run has ended and how it went.
