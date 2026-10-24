@@ -102,7 +102,7 @@
       <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16.5v.5" /></svg>
       <div class="prompt-text">
         <span class="strong">
-          {prompt === "retry" ? "A step failed. Retry it?" : "Topgrade is asking a question"}
+          {prompt === "retry" ? "A step failed. Retry it?" : "A question from topgrade"}
         </span>
         <span>Read the question and answer it in the terminal.</span>
       </div>
