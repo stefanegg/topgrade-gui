@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { invoke, Channel } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
@@ -244,6 +245,13 @@
       }
       // A search box with text clears itself first.
       back = !(target instanceof HTMLInputElement && target.type === "search" && target.value !== "");
+      // Overview's home is the top: close the window (it hides to the tray,
+      // like the close button).
+      if (back && view === "overview" && phase === "home" && !running) {
+        e.preventDefault();
+        getCurrentWindow().close().catch(() => {});
+        return;
+      }
     } else {
       back = (e.altKey && e.key === "ArrowLeft") || (isMac && e.metaKey && e.key === "[");
     }
