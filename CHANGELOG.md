@@ -13,6 +13,7 @@ The app shows this file in Settings.
 - Theme setting: System, Light or Dark. On Linux the tray icon keeps following the desktop panel's theme.
 
 ### Changed
+- A run that was stopped before topgrade's summary counts as not finished: Overview says the last update didn't finish, History marks it "Didn't finish", and the update reminder (and "Last update" in the tray menu) count from the last finished run instead.
 - New layout with Overview, History and Settings pages. Overview shows whether an update is due, the run options in plain words, and the last run's results; during a run it shows progress and the steps so far.
 - The terminal moved into a drawer at the bottom that you can open and close; clicking a step opens it at that step's output.
 - The app's own logo and colours are used throughout.

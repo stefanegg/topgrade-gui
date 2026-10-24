@@ -29,6 +29,19 @@ pub struct RunSummary {
     pub unmatched: Vec<UnmatchedResult>,
 }
 
+impl RunSummary {
+    pub fn is_dry_run(&self) -> bool {
+        self.flags.iter().any(|f| f == "--dry-run" || f == "-n")
+    }
+
+    /// Whether topgrade got as far as its closing summary. A run that was
+    /// stopped, crashed or lost its window has no step results. Mirrored by
+    /// `isFinished` in src/lib/run.ts.
+    pub fn is_finished(&self) -> bool {
+        self.steps.iter().any(|s| s.status.is_some()) || !self.unmatched.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StepSummary {
@@ -252,6 +265,17 @@ mod tests {
             recorder.on_event(&event);
         }
         recorder.finish(Some(0), Some("17.12.3".into()))
+    }
+
+    #[test]
+    fn run_without_summary_is_not_finished() {
+        let full = include_bytes!("../tests/fixtures/fedora-run.log");
+        assert!(record(full).is_finished());
+        // Cut the log before topgrade's summary, as a stopped run would be.
+        let cut = full.windows(9).position(|w| w == b"- Summary").unwrap();
+        let stopped = record(&full[..cut]);
+        assert!(!stopped.steps.is_empty());
+        assert!(!stopped.is_finished());
     }
 
     #[test]

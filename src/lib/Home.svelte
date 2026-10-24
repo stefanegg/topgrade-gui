@@ -1,9 +1,12 @@
 <script lang="ts">
-  import { formatAgo, formatDate, summaryTotals, type RunSummary } from "./run";
+  import { formatAgo, formatDate, isFinished, summaryTotals, type RunSummary } from "./run";
   import { collectChanges, highlightNames, joinNames } from "./changes";
 
   interface Props {
+    /** Newest real (non-dry) run, finished or not. */
     lastRun: RunSummary | undefined;
+    /** Newest real run that finished; the reminder counts from this one. */
+    lastUpdate: RunSummary | undefined;
     remindAfterDays: number;
     now: number;
     cleanup: boolean;
@@ -13,14 +16,16 @@
     onopenrun: (run: RunSummary) => void;
   }
 
-  let { lastRun, remindAfterDays, now, cleanup, assumeYes, onoptions, onrun, onopenrun }: Props =
+  let { lastRun, lastUpdate, remindAfterDays, now, cleanup, assumeYes, onoptions, onrun, onopenrun }: Props =
     $props();
 
   const DAY = 24 * 60 * 60 * 1000;
 
   let due = $derived(
-    !lastRun || now - new Date(lastRun.startedAt).getTime() >= remindAfterDays * DAY,
+    !lastUpdate || now - new Date(lastUpdate.startedAt).getTime() >= remindAfterDays * DAY,
   );
+  /** The last run was stopped (or crashed) before topgrade's summary. */
+  let unfinished = $derived(lastRun !== undefined && !isFinished(lastRun));
 
   let lastChanges = $derived(
     lastRun
@@ -33,32 +38,48 @@
 
   let lastSummary = $derived.by(() => {
     const names = highlightNames(lastChanges);
-    if (names.length === 0) return "Nothing needed updating.";
+    if (names.length === 0) {
+      return unfinished
+        ? "It stopped before anything was reported as updated."
+        : "Nothing needed updating.";
+    }
     const rest = lastChanges.length - names.length;
-    return rest > 0 ? `${names.join(", ")} and ${rest} more` : joinNames(names);
+    const list = rest > 0 ? `${names.join(", ")} and ${rest} more` : joinNames(names);
+    return unfinished ? `Updated before it stopped: ${list}` : list;
   });
-
 </script>
 
 <div class="home">
   <section class="main-col">
     <div class="card hero">
       <div class="status">
-        <div class="status-icon" class:due>
-          {#if due}
+        <div class="status-icon" class:due={due || unfinished}>
+          {#if unfinished}
+            <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v6M12 17v.5" /><circle cx="12" cy="12" r="9" /></svg>
+          {:else if due}
             <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
           {:else}
             <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10" /></svg>
           {/if}
         </div>
         <div>
-          {#if !lastRun}
+          {#if unfinished && lastRun}
+            <h1>Your last update didn't finish</h1>
+            <p class="muted">
+              It was stopped on {formatDate(lastRun.startedAt)}, so some steps didn't run.
+              {#if lastUpdate}
+                The last complete update was {formatAgo(lastUpdate.startedAt, now)}.
+              {:else}
+                No update has finished yet.
+              {/if}
+            </p>
+          {:else if !lastUpdate}
             <h1>Ready for your first update</h1>
             <p class="muted">Topgrade GUI runs topgrade, which updates everything it finds on this computer, one source after another.</p>
           {:else}
             <h1>{due ? "Time for an update" : "Up to date"}</h1>
             <p class="muted">
-              Last updated {formatAgo(lastRun.startedAt, now)} ({formatDate(lastRun.startedAt)}).
+              Last updated {formatAgo(lastUpdate.startedAt, now)} ({formatDate(lastUpdate.startedAt)}).
             </p>
           {/if}
         </div>
@@ -98,12 +119,18 @@
       <div class="card last">
         <div class="last-text">
           <span class="strong">
-            Last run: {lastTotals.updated} {lastTotals.updated === 1 ? "update" : "updates"}
-            {#if lastTotals.failed > 0}<span class="failed">· {lastTotals.failed} failed</span>{/if}
+            {#if unfinished}
+              Last run: <span class="failed">didn't finish</span>
+            {:else}
+              Last run: {lastTotals.updated} {lastTotals.updated === 1 ? "update" : "updates"}
+              {#if lastTotals.failed > 0}<span class="failed">· {lastTotals.failed} failed</span>{/if}
+            {/if}
           </span>
           <span class="muted">{lastSummary}</span>
         </div>
-        <button class="btn" onclick={() => onopenrun(lastRun)}>See what changed</button>
+        <button class="btn" onclick={() => onopenrun(lastRun)}>
+          {unfinished ? "See details" : "See what changed"}
+        </button>
       </div>
     {/if}
   </section>

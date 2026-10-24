@@ -52,7 +52,7 @@ impl AppState {
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let run = MenuItem::with_id(app, "run", "Run now", true, None::<&str>)?;
-    let last_run = MenuItem::with_id(app, "last-run", "Last run: never", false, None::<&str>)?;
+    let last_run = MenuItem::with_id(app, "last-run", "Last update: never", false, None::<&str>)?;
     let update = MenuItem::with_id(app, "update", "Check for updates", true, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open Topgrade GUI", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -308,12 +308,12 @@ pub fn save_window_state(app: &AppHandle) {
     }
 }
 
-/// Updates "Last run: …" in the tray menu; call after a run finishes.
+/// Updates "Last update: …" in the tray menu; call after a run finishes.
 pub fn refresh(app: &AppHandle) {
     let state = app.state::<AppState>();
-    let text = match last_real_run(&state) {
-        Some((_, age)) => format!("Last run: {}", format_age(age)),
-        None => "Last run: never".to_string(),
+    let text = match last_update(&state) {
+        Some((_, age)) => format!("Last update: {}", format_age(age)),
+        None => "Last update: never".to_string(),
     };
     if let Some(item) = state.last_run_item.lock().unwrap().as_ref() {
         let _ = item.set_text(&text);
@@ -323,10 +323,12 @@ pub fn refresh(app: &AppHandle) {
     }
 }
 
-fn last_real_run(state: &AppState) -> Option<(RunSummary, chrono::Duration)> {
+/// The newest run that really updated: not a dry run, and not stopped
+/// before topgrade's summary (that one didn't update everything).
+fn last_update(state: &AppState) -> Option<(RunSummary, chrono::Duration)> {
     let run = history::list(&state.log_dir())
         .into_iter()
-        .find(|r| !r.flags.iter().any(|f| f == "--dry-run" || f == "-n"))?;
+        .find(|r| !r.is_dry_run() && r.is_finished())?;
     let started = chrono::DateTime::parse_from_rfc3339(&run.started_at).ok()?;
     let age = chrono::Local::now().signed_duration_since(started);
     Some((run, age))
@@ -355,13 +357,13 @@ fn start_reminder(app: AppHandle) {
 fn check_overdue(app: &AppHandle) {
     let state = app.state::<AppState>();
     let days = state.settings.lock().unwrap().remind_after_days;
-    let body = match last_real_run(&state) {
+    let body = match last_update(&state) {
         Some((_, age)) if age.num_days() < i64::from(days) => return,
         Some((_, age)) => format!(
             "Last update was {}. Use Run now in the tray menu.",
             format_age(age)
         ),
-        None => "No update run recorded yet. Use Run now in the tray menu.".into(),
+        None => "No finished update recorded yet. Use Run now in the tray menu.".into(),
     };
     let mut last = state.last_notified.lock().unwrap();
     if last.is_some_and(|t| t.elapsed() < RENOTIFY_AFTER) {
