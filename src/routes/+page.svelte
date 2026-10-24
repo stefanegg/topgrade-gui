@@ -199,18 +199,29 @@
     view = to;
   }
 
-  /** Back from a saved run to the page it was opened from. */
+  /** Whether there is a level to go back up to: a saved run (back to
+   *  History or Overview) or a finished run's results (back to Home). A run
+   *  in progress has none; it ends with Stop or by finishing. */
+  let canGoBack = $derived(!running && (viewing !== null || (view === "overview" && phase === "results")));
+
   function goBack() {
-    if (viewing && !running) closeRun();
+    if (canGoBack) closeRun();
   }
 
-  /** Mouse back button, Alt+Left, and Cmd+[ on macOS. */
+  /** Escape, mouse back button, Alt+Left, and Cmd+[ on macOS. */
   function onBackGesture(e: MouseEvent | KeyboardEvent) {
-    const back =
-      e instanceof MouseEvent
-        ? e.button === 3
-        : (e.altKey && e.key === "ArrowLeft") || (isMac && e.metaKey && e.key === "[");
-    if (back && viewing) {
+    let back: boolean;
+    if (e instanceof MouseEvent) {
+      back = e.button === 3;
+    } else if (e.key === "Escape") {
+      // A search box with text clears itself first. (During a run Escape
+      // reaches the terminal untouched: there is nothing to go back to.)
+      const target = e.target;
+      back = !(target instanceof HTMLInputElement && target.type === "search" && target.value !== "");
+    } else {
+      back = (e.altKey && e.key === "ArrowLeft") || (isMac && e.metaKey && e.key === "[");
+    }
+    if (back && canGoBack) {
       e.preventDefault();
       goBack();
     }
