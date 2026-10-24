@@ -586,7 +586,8 @@
   <header class="topbar" class:mac={isMac} data-tauri-drag-region>
     <div class="brand" data-tauri-drag-region>
       <Logo size={26} />
-      <span data-tauri-drag-region>Topgrade GUI</span>
+      <!-- macOS shows the app name in the menu bar already. -->
+      {#if !isMac}<span data-tauri-drag-region>Topgrade GUI</span>{/if}
     </div>
     <nav aria-label="Main">
       <button aria-current={view === "overview" ? "page" : undefined} onclick={() => navigate("overview")}>
