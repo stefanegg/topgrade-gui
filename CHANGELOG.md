@@ -17,7 +17,7 @@ The app shows this file in Settings.
 - New layout with Overview, History and Settings pages. Overview shows whether an update is due, the run options in plain words, and the last run's results; during a run it shows progress and the steps so far.
 - The terminal moved into a drawer at the bottom that you can open and close; clicking a step opens it at that step's output.
 - The app's own logo and colours are used throughout.
-- Escape (and the other back gestures) also closes the results after a run or preview and returns to Overview.
+- Escape (and the other back gestures) also closes the results after a run or preview and returns to Overview. On the History list or Settings, Escape returns to Overview too.
 - Escape during a run or preview asks "Stop this update?" before stopping it (Keep running is the default). While you're typing in the terminal, Escape goes to the terminal instead.
 - Past runs open as a sub-page with a breadcrumb and a Back button that returns to where you came from (History or Overview); Escape, the mouse back button and Alt+← (⌘[ on macOS) work too.
 - The app calls itself "Topgrade GUI" throughout, to keep it apart from topgrade, the tool it runs.

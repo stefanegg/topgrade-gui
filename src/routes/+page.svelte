@@ -225,6 +225,13 @@
       // The open dialog handles its own Escape (Keep running); typing in the
       // terminal sends Escape to topgrade.
       if (stopDialog.open || (target instanceof Node && termEl.contains(target))) return;
+      // History list and Settings: back to Overview (also during a run,
+      // whose progress is shown there).
+      if (!viewing && view !== "overview") {
+        e.preventDefault();
+        navigate("overview");
+        return;
+      }
       if (running && !viewing && !stopping) {
         e.preventDefault();
         confirmStop();
