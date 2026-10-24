@@ -10,12 +10,15 @@ The app shows this file in Settings.
 - "What changed" page after each run: every updated package with its old and new version, grouped into Apps, System and tools, and Firmware, with a search box, filters and "Copy list". A one-sentence summary names the apps you'll recognise.
 - A "Restart when convenient" note when firmware or core system packages were updated.
 - Password prompts appear as a field in the app; the password is passed to sudo in the terminal and not stored.
-- Theme setting: System, Light or Dark.
+- Theme setting: System, Light or Dark. On Linux the tray icon keeps following the desktop panel's theme.
 
 ### Changed
 - New layout with Overview, History and Settings pages. Overview shows whether an update is due, the run options in plain words, and the last run's results; during a run it shows progress and the steps so far.
 - The terminal moved into a drawer at the bottom that you can open and close; clicking a step opens it at that step's output.
 - The app's own logo and colours are used throughout.
+- Past runs open as a sub-page with a breadcrumb and a Back button that returns to where you came from (History or Overview); the mouse back button and Alt+← (⌘[ on macOS) work too.
+- The app calls itself "Topgrade GUI" throughout, to keep it apart from topgrade, the tool it runs.
+- No separate title bar: the app's header is the title bar (drag to move, double-click to maximize). Linux gets the app's own minimize, maximize and close buttons; macOS keeps its native window buttons inside the header.
 
 ## 0.5.0 - 2026-10-24
 

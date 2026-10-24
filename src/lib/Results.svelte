@@ -27,6 +27,8 @@
     problem: string | null;
     degraded: boolean;
     logPath: string | null;
+    /** Where a saved run was opened from; `ondone` goes back there. */
+    breadcrumb: { parent: string; current: string } | null;
     ondone: () => void;
     onshowlog: () => void;
     onshowterminal: () => void;
@@ -45,6 +47,7 @@
     problem,
     degraded,
     logPath,
+    breadcrumb,
     ondone,
     onshowlog,
     onshowterminal,
@@ -143,6 +146,16 @@
 </script>
 
 <div class="results">
+  {#if breadcrumb}
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <button class="crumb-back" onclick={ondone} disabled={loading}>
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+        {breadcrumb.parent}
+      </button>
+      <span class="muted" aria-hidden="true">/</span>
+      <span aria-current="page">{breadcrumb.current}</span>
+    </nav>
+  {/if}
   <div class="head">
     <div class="status-icon" class:bad={problem || failed.length > 0} aria-hidden="true">
       {#if problem || failed.length > 0}
@@ -168,7 +181,9 @@
       {#if logPath}
         <button class="btn" onclick={onshowlog} title={logPath}>Show log file</button>
       {/if}
-      <button class="btn primary" onclick={ondone}>{saved ? "Close" : "Done"}</button>
+      <button class="btn primary" onclick={ondone} disabled={loading}>
+        {breadcrumb ? `Back to ${breadcrumb.parent}` : "Done"}
+      </button>
     </div>
   </div>
 
@@ -297,6 +312,36 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
+  }
+
+  .crumbs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: -8px;
+    font-size: 13px;
+  }
+
+  .crumb-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    min-height: 28px;
+    padding: 0 8px 0 2px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--link);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .crumb-back:hover:not(:disabled) {
+    background: var(--surface-2);
+  }
+
+  .crumb-back svg {
+    stroke-width: 2;
   }
 
   .head {

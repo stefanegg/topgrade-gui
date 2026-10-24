@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isMac } from "./platform";
 
 /** settings.rs `Theme`. */
 export type Theme = "system" | "light" | "dark";
@@ -13,8 +14,12 @@ export function applyTheme(theme: Theme) {
   } catch {
     // Storage unavailable: the theme still applies once settings load.
   }
-  // Native title bar and dialogs follow too; null means "follow the system".
-  getCurrentWindow()
-    .setTheme(theme === "system" ? null : theme)
-    .catch(() => {});
+  // On macOS the window buttons and dialogs follow too; null means "follow
+  // the system". Not on Linux: there the tray icon reads the window theme to
+  // match the panel, and the app draws its own window buttons anyway.
+  if (isMac) {
+    getCurrentWindow()
+      .setTheme(theme === "system" ? null : theme)
+      .catch(() => {});
+  }
 }

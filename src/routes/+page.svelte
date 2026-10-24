@@ -13,8 +13,11 @@
   import Results from "$lib/Results.svelte";
   import HistoryList from "$lib/HistoryList.svelte";
   import SettingsPanel from "$lib/SettingsPanel.svelte";
+  import WindowControls from "$lib/WindowControls.svelte";
+  import { isMac } from "$lib/platform";
   import { applyTheme } from "$lib/theme";
   import {
+    formatDate,
     isDryRun,
     runTotals,
     formatDuration,
@@ -58,7 +61,8 @@
   let notice = $state<string | null>(null);
 
   let history = $state<RunSummary[]>([]);
-  /** Saved run being replayed read-only; `null` for live runs. */
+  /** Saved run being replayed read-only; `null` for live runs. It is a
+   *  sub-page of `view` (History, or Overview's "See what changed"). */
   let viewing = $state<RunSummary | null>(null);
   let lastRun = $derived(history.find((r) => !isDryRun(r)));
 
@@ -184,10 +188,36 @@
     updateSettings(patch);
   }
 
+  /** Switches page; leaving a saved run closes it. */
+  function navigate(to: View) {
+    if (viewing) {
+      if (running) return; // still loading it
+      closeRun();
+    }
+    view = to;
+  }
+
+  /** Back from a saved run to the page it was opened from. */
+  function goBack() {
+    if (viewing && !running) closeRun();
+  }
+
+  /** Mouse back button, Alt+Left, and Cmd+[ on macOS. */
+  function onBackGesture(e: MouseEvent | KeyboardEvent) {
+    const back =
+      e instanceof MouseEvent
+        ? e.button === 3
+        : (e.altKey && e.key === "ArrowLeft") || (isMac && e.metaKey && e.key === "[");
+    if (back && viewing) {
+      e.preventDefault();
+      goBack();
+    }
+  }
+
   /** Tray "Run now": start with the saved flags unless a run is active. */
   function runFromTray() {
     if (running) return;
-    view = "overview";
+    navigate("overview");
     dryRun = false;
     run();
   }
@@ -286,7 +316,7 @@
         runEndedAt = Date.now();
         if (e.kind === "error") problem = `The run failed: ${e.message}`;
         else if (stopping) problem = "You stopped the run before it finished.";
-        else if (e.code !== 0) problem = `Topgrade ended with exit code ${e.code}.`;
+        else if (e.code !== 0) problem = `The run ended with exit code ${e.code}.`;
         stopping = false;
         writeFooter(e);
         loadHistory();
@@ -366,8 +396,8 @@
     await start("replay_fixture", { name });
   }
 
-  async function openRun(saved: RunSummary) {
-    view = "overview";
+  async function openRun(saved: RunSummary, from: View) {
+    view = from;
     viewing = saved;
     runIsDry = isDryRun(saved);
     await start("replay_run", { id: saved.id });
@@ -440,6 +470,8 @@
     term.open(termEl);
     fit.fit();
     termEl.addEventListener("wheel", onTermWheel, { capture: true, passive: false });
+    window.addEventListener("mouseup", onBackGesture);
+    window.addEventListener("keydown", onBackGesture);
 
     term.onData((data) => {
       if (!running || viewing) return;
@@ -466,7 +498,7 @@
       }),
       listen("update-requested", async () => {
         await checkForUpdate();
-        if (!update) view = "settings";
+        if (!update) navigate("settings");
       }),
       listen<{ downloaded: number; total: number | null }>("update-progress", (e) => {
         const { downloaded, total } = e.payload;
@@ -478,6 +510,8 @@
       clearInterval(clock);
       observer.disconnect();
       termEl.removeEventListener("wheel", onTermWheel, { capture: true });
+      window.removeEventListener("mouseup", onBackGesture);
+      window.removeEventListener("keydown", onBackGesture);
       clearTimeout(saveFontTimer);
       term.dispose();
     };
@@ -485,22 +519,23 @@
 </script>
 
 <div class="app">
-  <header class="topbar">
-    <div class="brand">
+  <!-- Doubles as the title bar: drag to move, double-click to maximize. -->
+  <header class="topbar" class:mac={isMac} data-tauri-drag-region>
+    <div class="brand" data-tauri-drag-region>
       <Logo size={26} />
-      <span>Topgrade</span>
+      <span data-tauri-drag-region>Topgrade GUI</span>
     </div>
     <nav aria-label="Main">
-      <button aria-current={view === "overview" ? "page" : undefined} onclick={() => (view = "overview")}>
+      <button aria-current={view === "overview" ? "page" : undefined} onclick={() => navigate("overview")}>
         Overview
         {#if running && view !== "overview"}<span class="dot" title="A run is in progress"></span>{/if}
       </button>
-      <button aria-current={view === "history" ? "page" : undefined} onclick={() => (view = "history")}>
+      <button aria-current={view === "history" ? "page" : undefined} onclick={() => navigate("history")}>
         History
       </button>
       <button
         aria-current={view === "settings" ? "page" : undefined}
-        onclick={() => (view = "settings")}
+        onclick={() => navigate("settings")}
         disabled={!settings}
       >
         Settings
@@ -522,6 +557,9 @@
         <option>fedora-run.log</option>
         <option>macos-dry-run.log</option>
       </select>
+    {/if}
+    {#if !isMac}
+      <WindowControls />
     {/if}
   </header>
 
@@ -548,8 +586,8 @@
   {/if}
 
   <main class="content">
-    {#if view === "history"}
-      <HistoryList runs={history} {now} disabled={running} onopen={openRun} />
+    {#if view === "history" && !viewing}
+      <HistoryList runs={history} {now} disabled={running} onopen={(run) => openRun(run, "history")} />
     {:else if view === "settings" && settings}
       <SettingsPanel
         {settings}
@@ -571,7 +609,7 @@
         {assumeYes}
         onoptions={setOptions}
         onrun={runFromHome}
-        onopenrun={openRun}
+        onopenrun={(run) => openRun(run, "overview")}
       />
     {:else if phase === "running"}
       <RunProgress
@@ -603,11 +641,17 @@
         loading={viewing !== null && running}
         problem={viewing
           ? viewing.exitCode !== null && viewing.exitCode !== 0
-            ? `Topgrade ended with exit code ${viewing.exitCode}.`
+            ? `The run ended with exit code ${viewing.exitCode}.`
             : null
           : problem}
         {degraded}
         {logPath}
+        breadcrumb={viewing
+          ? {
+              parent: view === "history" ? "History" : "Overview",
+              current: view === "history" ? formatDate(viewing.startedAt) : "Last run",
+            }
+          : null}
         ondone={closeRun}
         onshowlog={() => logPath && revealItemInDir(logPath)}
         onshowterminal={() => setTerminalOpen(true)}
@@ -616,7 +660,7 @@
     {/if}
   </main>
 
-  <section class="drawer" class:hidden={view !== "overview"} aria-label="Terminal">
+  <section class="drawer" class:hidden={view !== "overview" && !viewing} aria-label="Terminal">
     <div class="drawer-bar">
       <button class="drawer-toggle" aria-expanded={terminalOpen} onclick={() => setTerminalOpen(!terminalOpen)}>
         <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" class:open={terminalOpen}><path d="M18 15l-6-6-6 6" /></svg>
@@ -651,7 +695,9 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 16px;
-    padding: 10px 24px;
+    padding: 10px 12px 10px 24px;
+    user-select: none;
+    -webkit-user-select: none;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
   }
@@ -664,10 +710,16 @@
     font-size: 15px;
   }
 
+  /* Room for the macOS traffic lights (overlay title bar). */
+  .topbar.mac {
+    padding-left: 84px;
+    padding-right: 24px;
+  }
+
   nav {
     display: flex;
     gap: 4px;
-    flex: 1;
+    margin-right: auto;
   }
 
   nav button {

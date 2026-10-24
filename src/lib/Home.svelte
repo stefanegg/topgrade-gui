@@ -68,7 +68,7 @@
         <div>
           {#if !lastRun}
             <h1>Ready for your first update</h1>
-            <p class="muted">Topgrade updates everything it finds on this computer, one source after another.</p>
+            <p class="muted">Topgrade GUI runs topgrade, which updates everything it finds on this computer, one source after another.</p>
           {:else}
             <h1>{due ? "Time for an update" : "Up to date"}</h1>
             <p class="muted">
