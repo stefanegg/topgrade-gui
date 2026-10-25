@@ -23,6 +23,9 @@ use crate::window_state;
 /// (the frontend owns the terminal size).
 pub const RUN_REQUESTED: &str = "run-requested";
 
+/// Emitted when the window goes to the tray; the UI collapses its terminal.
+const WINDOW_HIDDEN: &str = "window-hidden";
+
 /// Labels of the run item; it opens the window instead while a run is active.
 const RUN_TEXT: &str = "Update everything";
 const RUNNING_TEXT: &str = "Show progress";
@@ -325,6 +328,7 @@ pub fn hide_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         save_window_state(app);
         let _ = window.hide();
+        let _ = app.emit(WINDOW_HIDDEN, ());
     }
     #[cfg(target_os = "macos")]
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);

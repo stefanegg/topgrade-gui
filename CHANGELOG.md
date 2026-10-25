@@ -12,6 +12,7 @@ The app shows this file in Settings.
 
 ### Changed
 - Checkboxes match the app's theme.
+- The terminal at the bottom always starts collapsed, and collapses again when the window is closed to the tray (unless a run is active). It no longer remembers being open.
 
 ## 0.6.3 - 2026-10-25
 

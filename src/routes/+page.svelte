@@ -87,8 +87,8 @@
   let installing = $state(false);
   let downloadPercent = $state<number | null>(null);
 
-  const TERMINAL_OPEN_KEY = "terminalOpen";
-  let terminalOpen = $state(readTerminalOpen());
+  /** Always starts collapsed; collapsed again when the window is closed. */
+  let terminalOpen = $state(false);
 
   type Phase = "home" | "running" | "results";
   let phase = $derived<Phase>(
@@ -98,21 +98,8 @@
   /** Step count of the last run of the same kind, for the progress estimate. */
   let expectedSteps = $derived(history.find((r) => isDryRun(r) === runIsDry)?.steps.length ?? null);
 
-  function readTerminalOpen(): boolean {
-    try {
-      return localStorage.getItem(TERMINAL_OPEN_KEY) === "true";
-    } catch {
-      return false;
-    }
-  }
-
   function setTerminalOpen(open: boolean) {
     terminalOpen = open;
-    try {
-      localStorage.setItem(TERMINAL_OPEN_KEY, String(open));
-    } catch {
-      // Not remembered; fine.
-    }
     if (open) {
       term.scrollToBottom();
       term.focus();
@@ -587,6 +574,10 @@
     invoke<string>("app_version").then((v) => (version = v)).catch(() => {});
     const unlisten = [
       listen("run-requested", runFromTray),
+      // A run that is still going keeps the terminal, which may hold a prompt.
+      listen("window-hidden", () => {
+        if (!running && terminalOpen) setTerminalOpen(false);
+      }),
       listen<UpdateInfo>("update-available", (e) => {
         update = e.payload;
         updateDismissed = false;
