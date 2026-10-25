@@ -6,6 +6,9 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+### Removed
+- The "Check what would change" button. A topgrade dry run only lists the tools it would run, not which packages would change, and Overview's source list already shows that. Past previews still show in History.
+
 ## 0.6.2 - 2026-10-25
 
 ### Fixed

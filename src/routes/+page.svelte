@@ -44,7 +44,6 @@
   let stopping = $state(false);
   let cleanup = $state(false);
   let assumeYes = $state(false);
-  let dryRun = $state(false);
 
   let steps = $state<Step[]>([]);
   let unmatched = $state<UnmatchedResult[]>([]);
@@ -265,7 +264,6 @@
   function runFromTray() {
     if (running) return;
     navigate("overview");
-    dryRun = false;
     run();
   }
 
@@ -299,7 +297,6 @@
     const f: string[] = [];
     if (cleanup) f.push("--cleanup");
     if (assumeYes) f.push("-y");
-    if (dryRun) f.push("--dry-run");
     return f;
   }
 
@@ -450,13 +447,8 @@
 
   async function run() {
     viewing = null;
-    runIsDry = dryRun;
+    runIsDry = false;
     await start("start_run", { flags: flags(), cols: term.cols, rows: term.rows });
-  }
-
-  function runFromHome(preview: boolean) {
-    dryRun = preview;
-    run();
   }
 
   async function replay(name: string) {
@@ -685,7 +677,7 @@
         {cleanup}
         {assumeYes}
         onoptions={setOptions}
-        onrun={runFromHome}
+        onrun={run}
         onopenrun={(run) => openRun(run, "overview")}
       />
     {:else if phase === "running"}
