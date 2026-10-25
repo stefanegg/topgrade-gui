@@ -1,4 +1,5 @@
 mod autostart;
+mod checks;
 mod extractors;
 mod history;
 mod parser;
@@ -99,6 +100,27 @@ async fn detect_sources(app: AppHandle) -> Result<sources::Sources, String> {
     let detected = result?;
     let _ = sources::save(&app.state::<AppState>().data_dir, &detected);
     Ok(detected)
+}
+
+/// Waiting updates per step, from the last check.
+#[tauri::command]
+fn get_checks(state: State<AppState>) -> Option<checks::Checks> {
+    checks::load(&state.data_dir)
+}
+
+/// Looks for waiting updates in `steps` (those with a check) and caches the
+/// result. Only one at a time.
+#[tauri::command]
+async fn run_checks(app: AppHandle, steps: Vec<String>) -> Result<checks::Checks, String> {
+    static CHECKING: AtomicBool = AtomicBool::new(false);
+    if CHECKING.swap(true, Ordering::SeqCst) {
+        return Err("already checking".into());
+    }
+    let result = tauri::async_runtime::spawn_blocking(move || checks::run(&steps)).await;
+    CHECKING.store(false, Ordering::SeqCst);
+    let found = result.map_err(|e| e.to_string())?;
+    let _ = checks::save(&app.state::<AppState>().data_dir, &found);
+    Ok(found)
 }
 
 /// Semver derived from git tags at build time (see build.rs).
@@ -222,6 +244,8 @@ pub fn run() {
             set_settings,
             get_sources,
             detect_sources,
+            get_checks,
+            run_checks,
             replay_fixture
         ])
         .build(tauri::generate_context!())

@@ -12,6 +12,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, Wry};
 use tauri_plugin_notification::NotificationExt;
 
+use crate::checks;
 use crate::history::{self, RunSummary};
 use crate::runner::Runner;
 use crate::settings::Settings;
@@ -21,6 +22,9 @@ use crate::window_state;
 /// Event asking the frontend to start a run with the saved default flags
 /// (the frontend owns the terminal size).
 pub const RUN_REQUESTED: &str = "run-requested";
+
+/// Emitted when the window goes to the tray; the UI collapses its terminal.
+const WINDOW_HIDDEN: &str = "window-hidden";
 
 /// Labels of the run item; it opens the window instead while a run is active.
 const RUN_TEXT: &str = "Update everything";
@@ -324,6 +328,7 @@ pub fn hide_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         save_window_state(app);
         let _ = window.hide();
+        let _ = app.emit(WINDOW_HIDDEN, ());
     }
     #[cfg(target_os = "macos")]
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -396,6 +401,11 @@ fn check_overdue(app: &AppHandle) {
         None => {
             "No finished update recorded yet. Choose Update everything in the tray menu.".into()
         }
+    };
+    let body = match checks::load(&state.data_dir).map_or(0, |c| c.waiting()) {
+        0 => body,
+        1 => format!("1 update is waiting. {body}"),
+        n => format!("{n} updates are waiting. {body}"),
     };
     let mut last = state.last_notified.lock().unwrap();
     if last.is_some_and(|t| t.elapsed() < RENOTIFY_AFTER) {

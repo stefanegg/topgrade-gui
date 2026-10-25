@@ -177,6 +177,54 @@ a {
   font-size: 12px;
 }
 
+input[type="checkbox"] {
+  appearance: none;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1.5px solid var(--muted);
+  border-radius: 5px;
+  background: var(--surface) center / 12px no-repeat;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+
+input[type="checkbox"]:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+input[type="checkbox"]:checked {
+  border-color: var(--accent);
+  background-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7'/%3E%3C/svg%3E");
+}
+
+/* The dark accent is light, so the check is dark there (see --accent-fg). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) input[type="checkbox"]:checked {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2306261e' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7'/%3E%3C/svg%3E");
+  }
+}
+
+:root[data-theme="dark"] input[type="checkbox"]:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2306261e' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7'/%3E%3C/svg%3E");
+}
+
+/* The label text toggles the box too. */
+label:has(> input[type="checkbox"]) {
+  cursor: pointer;
+}
+
+label:has(> input[type="checkbox"]:disabled) {
+  cursor: default;
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);

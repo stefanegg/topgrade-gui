@@ -4,6 +4,7 @@
     formatDate,
     isFinished,
     summaryTotals,
+    type Checks,
     type RunSummary,
     type Sources,
   } from "./run";
@@ -19,6 +20,9 @@
     sources: Sources | null;
     detecting: boolean;
     sourcesError: string | null;
+    /** Waiting updates per source; null until the first check finished. */
+    checks: Checks | null;
+    checking: boolean;
     ondetect: () => void;
     now: number;
     cleanup: boolean;
@@ -28,8 +32,22 @@
     onopenrun: (run: RunSummary) => void;
   }
 
-  let { lastRun, lastUpdate, remindAfterDays, sources, detecting, sourcesError, ondetect, now, cleanup, assumeYes, onoptions, onrun, onopenrun }: Props =
+  let { lastRun, lastUpdate, remindAfterDays, sources, detecting, sourcesError, checks, checking, ondetect, now, cleanup, assumeYes, onoptions, onrun, onopenrun }: Props =
     $props();
+
+  /** Source whose waiting updates are listed under the tags. */
+  let openSource = $state<string | null>(null);
+  let openOutcome = $derived(openSource ? checks?.results[openSource] : undefined);
+  let totalWaiting = $derived.by(() => {
+    let n = 0;
+    for (const o of Object.values(checks?.results ?? {})) if (o.state === "waiting") n += o.items.length;
+    return n;
+  });
+  let busy = $derived(detecting || checking);
+
+  function toggleSource(name: string) {
+    openSource = openSource === name ? null : name;
+  }
 
   const DAY = 24 * 60 * 60 * 1000;
 
@@ -152,11 +170,11 @@
       <h2 id="sources-title">What topgrade updates here</h2>
       <button
         class="refresh"
-        class:spinning={detecting}
+        class:spinning={busy}
         onclick={ondetect}
-        disabled={detecting}
-        aria-label={detecting ? "Checking…" : "Check again"}
-        title={detecting ? "Checking…" : "Check again"}
+        disabled={busy}
+        aria-label={busy ? "Checking…" : "Check for updates"}
+        title={busy ? "Checking…" : "Check for updates"}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M20 12a8 8 0 1 1-2.34-5.66" /><path d="M20 4v5h-5" />
@@ -164,19 +182,81 @@
       </button>
       {#if sources}
         <span class="muted small meta">
-          {sources.names.length} sources · checked {formatAgo(sources.detectedAt, now)}
+          {sources.names.length} sources
+          {#if totalWaiting > 0}· <span class="waiting-total">{totalWaiting} {totalWaiting === 1 ? "update" : "updates"} waiting</span>{/if}
+          · checked {formatAgo(checks?.checkedAt ?? sources.detectedAt, now)}
         </span>
       {/if}
     </div>
     {#if sources}
       <ul>
         {#each sources.names as name}
-          <li class="source-tag">
-            <span class="source-name" title={sourceName(name)}>{sourceName(name)}</span>
+          {@const outcome = checks?.results[name]}
+          <li>
+            {#if outcome?.state === "waiting"}
+              <button
+                class="source-tag waiting"
+                class:open={openSource === name}
+                aria-expanded={openSource === name}
+                title="Show what would be updated"
+                onclick={() => toggleSource(name)}
+              >
+                <span class="source-name">{sourceName(name)}</span>
+                <span class="count">
+                  <svg width="10" height="10" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                  {outcome.items.length}
+                </span>
+                <span class="visually-hidden">{outcome.items.length === 1 ? "update" : "updates"} waiting</span>
+              </button>
+            {:else if outcome?.state === "upToDate"}
+              <span class="source-tag" title="{sourceName(name)} is up to date">
+                <span class="source-name">{sourceName(name)}</span>
+                <svg class="state ok" width="12" height="12" viewBox="0 0 24 24" aria-label="Up to date"><path d="M5 12l5 5 9-10" /></svg>
+              </span>
+            {:else if outcome?.state === "failed"}
+              <span class="source-tag" title="Couldn't check: {outcome.message}">
+                <span class="source-name">{sourceName(name)}</span>
+                <svg class="state warn" width="12" height="12" viewBox="0 0 24 24" aria-label="Couldn't check"><path d="M12 7v6M12 17v.5" /><circle cx="12" cy="12" r="9" /></svg>
+              </span>
+            {:else}
+              <span class="source-tag unchecked" title="Waiting updates can't be previewed for this source">
+                <span class="source-name">{sourceName(name)}</span>
+              </span>
+            {/if}
           </li>
         {/each}
       </ul>
-      <p class="muted small">Found with a dry run of topgrade, which only looks and changes nothing.</p>
+      {#if openSource && openOutcome?.state === "waiting"}
+        <div class="detail" role="region" aria-label="Waiting updates for {sourceName(openSource)}">
+          <div class="detail-head">
+            <span class="strong">{sourceName(openSource)}</span>
+            <span class="muted small">{openOutcome.items.length} waiting</span>
+            <button class="close" aria-label="Close" onclick={() => (openSource = null)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </div>
+          <ul class="items">
+            {#each openOutcome.items as item}
+              <li>
+                <span class="item-name" title={item.name}>{item.name}</span>
+                <span class="muted small versions">
+                  {#if item.from}{item.from} →
+                  {/if}{item.to ?? ""}
+                </span>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
+      <p class="muted small">
+        {#if checks}
+          Dashed tags can't be checked for waiting updates.
+        {:else if checking}
+          Looking for waiting updates…
+        {:else}
+          Found with a dry run of topgrade, which only looks and changes nothing.
+        {/if}
+      </p>
     {:else if detecting}
       <p class="muted">Asking topgrade what it can update here…</p>
     {:else if sourcesError}
@@ -393,6 +473,132 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+  }
+
+  .sources li {
+    display: contents;
+  }
+
+  button.source-tag {
+    border: 0;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .source-tag.waiting {
+    background: var(--accent-soft);
+    color: var(--text);
+    padding-right: 4px;
+  }
+
+  .source-tag.waiting:hover,
+  .source-tag.waiting.open {
+    outline: 1px solid var(--accent);
+  }
+
+  .source-tag.unchecked {
+    background: none;
+    border: 1px dashed color-mix(in srgb, var(--muted) 55%, transparent);
+    padding: 1px 7px;
+  }
+
+  .count {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 6px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .count svg,
+  .state,
+  .close svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .state {
+    flex-shrink: 0;
+  }
+
+  .state.ok {
+    color: var(--ok);
+  }
+
+  .state.warn {
+    color: var(--warn);
+  }
+
+  .waiting-total {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .detail {
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--surface-2);
+    padding: 8px 12px;
+  }
+
+  .detail-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 6px;
+  }
+
+  .close {
+    margin: -4px -6px -4px auto;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .close:hover {
+    background: var(--border-soft);
+    color: var(--text);
+  }
+
+  .sources ul.items {
+    display: block;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .items li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 3px 0;
+    font-size: 13px;
+  }
+
+  .item-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .versions {
+    flex-shrink: 0;
+    text-align: right;
   }
 
   .source-name {

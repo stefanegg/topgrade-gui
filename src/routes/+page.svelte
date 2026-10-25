@@ -24,6 +24,7 @@
     runTotals,
     formatDuration,
     type PromptKind,
+    type Checks,
     type RunSummary,
     type Settings,
     type Sources,
@@ -72,6 +73,9 @@
   let sources = $state<Sources | null>(null);
   let detecting = $state(false);
   let sourcesError = $state<string | null>(null);
+  /** Waiting updates per source, from the last check. */
+  let checks = $state<Checks | null>(null);
+  let checking = $state(false);
 
   let settings = $state<Settings | null>(null);
   let version = $state("");
@@ -83,8 +87,8 @@
   let installing = $state(false);
   let downloadPercent = $state<number | null>(null);
 
-  const TERMINAL_OPEN_KEY = "terminalOpen";
-  let terminalOpen = $state(readTerminalOpen());
+  /** Always starts collapsed; collapsed again when the window is closed. */
+  let terminalOpen = $state(false);
 
   type Phase = "home" | "running" | "results";
   let phase = $derived<Phase>(
@@ -94,21 +98,8 @@
   /** Step count of the last run of the same kind, for the progress estimate. */
   let expectedSteps = $derived(history.find((r) => isDryRun(r) === runIsDry)?.steps.length ?? null);
 
-  function readTerminalOpen(): boolean {
-    try {
-      return localStorage.getItem(TERMINAL_OPEN_KEY) === "true";
-    } catch {
-      return false;
-    }
-  }
-
   function setTerminalOpen(open: boolean) {
     terminalOpen = open;
-    try {
-      localStorage.setItem(TERMINAL_OPEN_KEY, String(open));
-    } catch {
-      // Not remembered; fine.
-    }
     if (open) {
       term.scrollToBottom();
       term.focus();
@@ -267,13 +258,38 @@
     run();
   }
 
-  /** Re-detects with a background dry run when the saved list is older than this. */
+  /** Re-detects and re-checks when the saved results are older than this. */
   const SOURCES_MAX_AGE = 24 * 60 * 60 * 1000;
+  const stale = (iso: string) => Date.now() - new Date(iso).getTime() > SOURCES_MAX_AGE;
 
   async function loadSources() {
     sources = await invoke<Sources | null>("get_sources").catch(() => null);
-    if (!sources || Date.now() - new Date(sources.detectedAt).getTime() > SOURCES_MAX_AGE) {
-      detectSources();
+    checks = await invoke<Checks | null>("get_checks").catch(() => null);
+    await maintainSources();
+  }
+
+  /** The window may stay open (or hidden in the tray) for days. */
+  async function maintainSources() {
+    if (running || detecting || checking) return;
+    if (!sources || stale(sources.detectedAt)) await detectSources();
+    if (sources && (!checks || stale(checks.checkedAt))) await runChecks();
+  }
+
+  /** The refresh button: look for tools again, then for waiting updates. */
+  async function refreshSources() {
+    await detectSources();
+    await runChecks();
+  }
+
+  async function runChecks() {
+    if (!sources || checking) return;
+    checking = true;
+    try {
+      checks = await invoke<Checks>("run_checks", { steps: sources.names });
+    } catch {
+      // Keep showing the previous results.
+    } finally {
+      checking = false;
     }
   }
 
@@ -387,6 +403,8 @@
         stopping = false;
         writeFooter(e);
         loadHistory();
+        // What was waiting has changed.
+        if (!runIsDry) runChecks();
         break;
     }
   }
@@ -549,12 +567,17 @@
     const observer = new ResizeObserver(() => fit.fit());
     observer.observe(termEl);
     const clock = setInterval(() => (now = Date.now()), 1000);
+    const recheck = setInterval(maintainSources, 60 * 60 * 1000);
     loadHistory();
     loadSettings();
     loadSources();
     invoke<string>("app_version").then((v) => (version = v)).catch(() => {});
     const unlisten = [
       listen("run-requested", runFromTray),
+      // A run that is still going keeps the terminal, which may hold a prompt.
+      listen("window-hidden", () => {
+        if (!running && terminalOpen) setTerminalOpen(false);
+      }),
       listen<UpdateInfo>("update-available", (e) => {
         update = e.payload;
         updateDismissed = false;
@@ -571,6 +594,7 @@
     return () => {
       unlisten.forEach((u) => u.then((stop) => stop()));
       clearInterval(clock);
+      clearInterval(recheck);
       observer.disconnect();
       termEl.removeEventListener("wheel", onTermWheel, { capture: true });
       window.removeEventListener("mouseup", onBackGesture);
@@ -672,7 +696,9 @@
         {sources}
         {detecting}
         {sourcesError}
-        ondetect={detectSources}
+        {checks}
+        {checking}
+        ondetect={refreshSources}
         {now}
         {cleanup}
         {assumeYes}
