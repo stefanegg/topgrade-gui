@@ -10,6 +10,9 @@ The app shows this file in Settings.
 - Waiting updates per source on Overview. Sources that can be checked (system packages with dnf, Flatpak, Homebrew formulae and apps, npm, pip3, snap, macOS system updates, rustup) show a count tag; click it to list what would be updated. Others show a check when up to date, a warning when the check failed, or a dashed tag when they can't be checked. Checks run in the background about once a day, after each update and with the refresh button; they never ask for a password.
 - The "time to update" reminder mentions how many updates are waiting.
 
+### Changed
+- Checkboxes match the app's theme.
+
 ## 0.6.3 - 2026-10-25
 
 ### Removed
