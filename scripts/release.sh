@@ -24,6 +24,10 @@ if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
   exit 1
 fi
 
+files=(package.json CHANGELOG.md src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json)
+# Put the files back if any step below fails, so a rerun starts clean.
+trap 'git checkout -q HEAD -- "${files[@]}"' ERR
+
 # First `"version"` / `version =` line only (never a dependency's). Perl
 # rather than sed so this runs the same on macOS and Linux.
 export version date="$(date +%F)"
@@ -34,10 +38,11 @@ perl -0pi -e 's/^version = ".*?"/version = "$ENV{version}"/m' src-tauri/Cargo.to
 
 perl -0pi -e 's/^## Unreleased$/## Unreleased\n\n## $ENV{version} - $ENV{date}/m' CHANGELOG.md
 
-# Refresh the lockfile's own package entry.
-(cd src-tauri && cargo update --offline -p topgrade-gui >/dev/null)
+# The lockfile's own package entry. Edited directly so releasing doesn't
+# need a Rust toolchain.
+perl -0pi -e 's/^(name = "topgrade-gui"\nversion = )".*?"/$1"$ENV{version}"/m' src-tauri/Cargo.lock
 
-git add package.json CHANGELOG.md src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
+git add "${files[@]}"
 git commit -q -m "Release v$version"
 git tag -a "v$version" -m "v$version"
 echo "Tagged v$version. Build with: pnpm tauri build   Publish with: git push --follow-tags"
