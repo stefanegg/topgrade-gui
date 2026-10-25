@@ -103,7 +103,7 @@
         />
         days
       </div>
-      <p class="hint">Checked hourly while the app runs in the tray. Previews don't count.</p>
+      <p class="hint">Checked hourly while the app runs in the tray.</p>
     </div>
     <div class="field">
       <label class="check">

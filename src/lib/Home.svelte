@@ -24,7 +24,7 @@
     cleanup: boolean;
     assumeYes: boolean;
     onoptions: (patch: { cleanup?: boolean; assumeYes?: boolean }) => void;
-    onrun: (dryRun: boolean) => void;
+    onrun: () => void;
     onopenrun: (run: RunSummary) => void;
   }
 
@@ -97,8 +97,7 @@
         </div>
       </div>
       <div class="actions">
-        <button class="btn primary large" onclick={() => onrun(false)}>Update everything</button>
-        <button class="btn large" onclick={() => onrun(true)}>Check what would change</button>
+        <button class="btn primary large" onclick={onrun}>Update everything</button>
       </div>
       <fieldset>
         <legend>Options</legend>
