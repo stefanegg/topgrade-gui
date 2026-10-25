@@ -3,18 +3,15 @@
 Ideas and planned work, roughly in priority order. Move an item to
 `CHANGELOG.md` (under Unreleased) when it ships.
 
-## Waiting-update counts for common package managers
+## More waiting-update checks
 
-Show how many updates are waiting per source ("System packages · 37
-waiting"), so Overview and the tray reminder can say "37 updates waiting"
-instead of only "it's been 7 days".
+Overview shows waiting updates for dnf, Flatpak, Homebrew, npm and rustup
+(`src-tauri/src/checks.rs`). Sources without a check show a dashed tag. Add
+checks for more of them, each with a parser and fixture:
 
-- One "Check for updates" action that runs all supported checks in
-  parallel, plus an automatic check about once a day; no button per tool.
-- Start with dnf (`dnf check-update`), Flatpak (`flatpak remote-ls
-  --updates`) and Homebrew (`brew outdated --json`; accurate only after
-  `brew update`). Other tools show no count.
-- Run in the background: these refresh metadata and need network
-  (dnf can take 10–30 s). Must never ask for a password.
-- Each tool needs its own output parser and tests, like the extractors in
-  `src-tauri/src/extractors/`.
+- `softwareupdate -l` (macOS system update)
+- `pip list --outdated` (pip3), `snap refresh --list`, `fwupdmgr get-updates`
+- pnpm, Yarn and Bun global packages
+- The Homebrew check is only accurate after `brew update`; consider running
+  it first.
+- The Flatpak check needs network; offline shows "couldn't check".

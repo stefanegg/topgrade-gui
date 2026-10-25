@@ -20,7 +20,7 @@ pub struct Update {
 }
 
 impl Update {
-    fn new(name: &str, from: Option<&str>, to: Option<&str>) -> Self {
+    pub(crate) fn new(name: &str, from: Option<&str>, to: Option<&str>) -> Self {
         Self {
             name: name.to_string(),
             from: from.map(str::to_string),

@@ -24,6 +24,7 @@
     runTotals,
     formatDuration,
     type PromptKind,
+    type Checks,
     type RunSummary,
     type Settings,
     type Sources,
@@ -72,6 +73,9 @@
   let sources = $state<Sources | null>(null);
   let detecting = $state(false);
   let sourcesError = $state<string | null>(null);
+  /** Waiting updates per source, from the last check. */
+  let checks = $state<Checks | null>(null);
+  let checking = $state(false);
 
   let settings = $state<Settings | null>(null);
   let version = $state("");
@@ -267,13 +271,38 @@
     run();
   }
 
-  /** Re-detects with a background dry run when the saved list is older than this. */
+  /** Re-detects and re-checks when the saved results are older than this. */
   const SOURCES_MAX_AGE = 24 * 60 * 60 * 1000;
+  const stale = (iso: string) => Date.now() - new Date(iso).getTime() > SOURCES_MAX_AGE;
 
   async function loadSources() {
     sources = await invoke<Sources | null>("get_sources").catch(() => null);
-    if (!sources || Date.now() - new Date(sources.detectedAt).getTime() > SOURCES_MAX_AGE) {
-      detectSources();
+    checks = await invoke<Checks | null>("get_checks").catch(() => null);
+    await maintainSources();
+  }
+
+  /** The window may stay open (or hidden in the tray) for days. */
+  async function maintainSources() {
+    if (running || detecting || checking) return;
+    if (!sources || stale(sources.detectedAt)) await detectSources();
+    if (sources && (!checks || stale(checks.checkedAt))) await runChecks();
+  }
+
+  /** The refresh button: look for tools again, then for waiting updates. */
+  async function refreshSources() {
+    await detectSources();
+    await runChecks();
+  }
+
+  async function runChecks() {
+    if (!sources || checking) return;
+    checking = true;
+    try {
+      checks = await invoke<Checks>("run_checks", { steps: sources.names });
+    } catch {
+      // Keep showing the previous results.
+    } finally {
+      checking = false;
     }
   }
 
@@ -387,6 +416,8 @@
         stopping = false;
         writeFooter(e);
         loadHistory();
+        // What was waiting has changed.
+        if (!runIsDry) runChecks();
         break;
     }
   }
@@ -549,6 +580,7 @@
     const observer = new ResizeObserver(() => fit.fit());
     observer.observe(termEl);
     const clock = setInterval(() => (now = Date.now()), 1000);
+    const recheck = setInterval(maintainSources, 60 * 60 * 1000);
     loadHistory();
     loadSettings();
     loadSources();
@@ -571,6 +603,7 @@
     return () => {
       unlisten.forEach((u) => u.then((stop) => stop()));
       clearInterval(clock);
+      clearInterval(recheck);
       observer.disconnect();
       termEl.removeEventListener("wheel", onTermWheel, { capture: true });
       window.removeEventListener("mouseup", onBackGesture);
@@ -672,7 +705,9 @@
         {sources}
         {detecting}
         {sourcesError}
-        ondetect={detectSources}
+        {checks}
+        {checking}
+        ondetect={refreshSources}
         {now}
         {cleanup}
         {assumeYes}

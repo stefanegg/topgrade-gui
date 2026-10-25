@@ -12,6 +12,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, Wry};
 use tauri_plugin_notification::NotificationExt;
 
+use crate::checks;
 use crate::history::{self, RunSummary};
 use crate::runner::Runner;
 use crate::settings::Settings;
@@ -396,6 +397,11 @@ fn check_overdue(app: &AppHandle) {
         None => {
             "No finished update recorded yet. Choose Update everything in the tray menu.".into()
         }
+    };
+    let body = match checks::load(&state.data_dir).map_or(0, |c| c.waiting()) {
+        0 => body,
+        1 => format!("1 update is waiting. {body}"),
+        n => format!("{n} updates are waiting. {body}"),
     };
     let mut last = state.last_notified.lock().unwrap();
     if last.is_some_and(|t| t.elapsed() < RENOTIFY_AFTER) {

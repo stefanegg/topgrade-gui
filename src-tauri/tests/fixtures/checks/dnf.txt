@@ -1,0 +1,22 @@
+Upgrades
+cockpit-bridge.noarch                          370-1.fc44     updates
+cockpit-networkmanager.noarch                  370-1.fc44     updates
+cockpit-storaged.noarch                        370-1.fc44     updates
+cockpit-system.noarch                          370-1.fc44     updates
+cockpit-ws.x86_64                              370-1.fc44     updates
+cockpit-ws-selinux.x86_64                      370-1.fc44     updates
+openssh.x86_64                                 10.2p1-16.fc44 updates
+openssh-askpass.x86_64                         10.2p1-16.fc44 updates
+openssh-clients.x86_64                         10.2p1-16.fc44 updates
+openssh-server.x86_64                          10.2p1-16.fc44 updates
+pipewire.x86_64                                1.6.10-1.fc44  updates
+pipewire-alsa.x86_64                           1.6.10-1.fc44  updates
+pipewire-config-raop.x86_64                    1.6.10-1.fc44  updates
+pipewire-gstreamer.x86_64                      1.6.10-1.fc44  updates
+pipewire-jack-audio-connection-kit.x86_64      1.6.10-1.fc44  updates
+pipewire-jack-audio-connection-kit-libs.x86_64 1.6.10-1.fc44  updates
+pipewire-libs.x86_64                           1.6.10-1.fc44  updates
+pipewire-plugin-libcamera.x86_64               1.6.10-1.fc44  updates
+pipewire-pulseaudio.x86_64                     1.6.10-1.fc44  updates
+pipewire-utils.x86_64                          1.6.10-1.fc44  updates
+strace.x86_64                                  7.3-1.fc44     updates

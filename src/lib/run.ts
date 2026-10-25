@@ -152,6 +152,18 @@ export interface Sources {
   names: string[];
 }
 
+/** checks.rs `Outcome`: what a check found for one step. */
+export type CheckOutcome =
+  | { state: "upToDate" }
+  | { state: "waiting"; items: UpdateItem[] }
+  | { state: "failed"; message: string };
+
+/** checks.rs `Checks`. A step missing from `results` has no check. */
+export interface Checks {
+  checkedAt: string;
+  results: Record<string, CheckOutcome>;
+}
+
 /** updater.rs `UpdateInfo`. */
 export interface UpdateInfo {
   version: string;

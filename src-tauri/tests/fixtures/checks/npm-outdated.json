@@ -1,0 +1,7 @@
+{
+  "left-pad": {
+    "wanted": "1.0.0",
+    "latest": "1.3.0",
+    "dependent": "np"
+  }
+}
