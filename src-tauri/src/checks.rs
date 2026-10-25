@@ -119,6 +119,22 @@ const SPECS: &[Spec] = &[
         parse: npm,
     },
     Spec {
+        steps: &["snap"],
+        command: "snap refresh --list",
+        parse: snap,
+    },
+    Spec {
+        steps: &["pip3"],
+        command: "pip3 list --outdated --format=json",
+        parse: pip,
+    },
+    Spec {
+        // Takes a while and needs no root.
+        steps: &["macOS system update"],
+        command: "softwareupdate --list",
+        parse: softwareupdate,
+    },
+    Spec {
         steps: &["rustup"],
         command: "rustup check",
         parse: rustup,
@@ -174,13 +190,14 @@ fn execute(spec: &Spec) -> Option<Outcome> {
     })
 }
 
-/// Runs `command` through the login shell, like topgrade itself (so PATH
-/// includes Homebrew, ~/.cargo/bin and so on), in English, without a terminal.
+/// Runs `command` through the login shell the way topgrade is started (`-l -i`,
+/// so PATH includes Homebrew, ~/.local/bin and so on; a plain login shell
+/// misses what `.bashrc`/`.zshrc` add), in English, without a terminal.
 fn spawn(command: &str) -> Result<Output, String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
     let script = format!("export LANG=C LC_ALL=C NO_COLOR=1; exec {command}");
     let mut cmd = Command::new(shell);
-    cmd.args(["-l", "-c", &script])
+    cmd.args(["-l", "-i", "-c", &script])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -356,6 +373,65 @@ fn npm(output: &Output) -> Result<Vec<Update>, String> {
         .collect())
 }
 
+/// `snap refresh --list`: a table (`Name Version Rev Size Publisher Notes`)
+/// when snaps can be refreshed, "All snaps up to date." on stderr otherwise.
+fn snap(output: &Output) -> Result<Vec<Update>, String> {
+    if output.code != Some(0) {
+        return Err(failure(output));
+    }
+    Ok(output
+        .stdout
+        .lines()
+        .skip_while(|l| !l.starts_with("Name"))
+        .skip(1)
+        .filter_map(|line| {
+            let mut cols = line.split_whitespace();
+            Some(Update::new(cols.next()?, None, cols.next()))
+        })
+        .collect())
+}
+
+/// `pip3 list --outdated --format=json`: an array of `{name, version,
+/// latest_version}`.
+fn pip(output: &Output) -> Result<Vec<Update>, String> {
+    if output.code != Some(0) {
+        return Err(failure(output));
+    }
+    let json: serde_json::Value =
+        serde_json::from_str(&output.stdout).map_err(|_| "unexpected pip output".to_string())?;
+    let rows = json.as_array().ok_or("unexpected pip output")?;
+    Ok(rows
+        .iter()
+        .filter_map(|row| {
+            let text = |key| row.get(key).and_then(|v| v.as_str());
+            Some(Update::new(
+                text("name")?,
+                text("version"),
+                text("latest_version"),
+            ))
+        })
+        .collect())
+}
+
+/// `softwareupdate --list`: each update is a `* Label: ...` line followed by
+/// an indented `Title: <name>, Version: <version>, Size: ...` line.
+fn softwareupdate(output: &Output) -> Result<Vec<Update>, String> {
+    if output.code != Some(0) {
+        return Err(failure(output));
+    }
+    // Some macOS versions print the list on stderr, others on stdout.
+    let text = format!("{}\n{}", output.stdout, output.stderr);
+    Ok(text
+        .lines()
+        .filter_map(|line| {
+            let rest = line.trim().strip_prefix("Title:")?;
+            let (title, rest) = rest.split_once(", Version:")?;
+            let version = rest.split(',').next()?.trim();
+            Some(Update::new(title.trim(), None, Some(version)))
+        })
+        .collect())
+}
+
 /// `rustup check`: a line per toolchain, `<name> - Update available : old
 /// (hash date) -> new (hash date)` or `<name> - up to date : version`.
 fn rustup(output: &Output) -> Result<Vec<Update>, String> {
@@ -488,6 +564,53 @@ mod tests {
     }
 
     #[test]
+    fn snap_table() {
+        let text = include_str!("../tests/fixtures/checks/snap-updates.txt");
+        let items = snap(&out(0, text, "")).unwrap();
+        assert_eq!(
+            items,
+            [
+                Update::new("core22", None, Some("20240111")),
+                Update::new("firefox", None, Some("150.0-1")),
+            ]
+        );
+        let none = include_str!("../tests/fixtures/checks/snap-up-to-date.txt");
+        assert!(snap(&out(0, none, "All snaps up to date.\n"))
+            .unwrap()
+            .is_empty());
+        assert!(snap(&out(1, "", "error: cannot communicate with server")).is_err());
+    }
+
+    #[test]
+    fn pip_outdated() {
+        let text = include_str!("../tests/fixtures/checks/pip-outdated.json");
+        let items = pip(&out(0, text, "")).unwrap();
+        assert_eq!(items.len(), 3);
+        assert_eq!(
+            items[0],
+            Update::new("annotated-doc", Some("0.0.4"), Some("0.0.5"))
+        );
+        assert!(pip(&out(0, "[]", "")).unwrap().is_empty());
+        assert!(pip(&out(0, "oops", "")).is_err());
+    }
+
+    #[test]
+    fn softwareupdate_list() {
+        let text = include_str!("../tests/fixtures/checks/softwareupdate-updates.txt");
+        let items = softwareupdate(&out(0, "", text)).unwrap();
+        assert_eq!(
+            items,
+            [
+                Update::new("macOS Sequoia 15.1", None, Some("15.1")),
+                Update::new("Safari", None, Some("18.1")),
+            ]
+        );
+        assert_eq!(softwareupdate(&out(0, text, "")).unwrap().len(), 2);
+        let none = include_str!("../tests/fixtures/checks/softwareupdate-up-to-date.txt");
+        assert!(softwareupdate(&out(0, "", none)).unwrap().is_empty());
+    }
+
+    #[test]
     fn rustup_check() {
         let text = include_str!("../tests/fixtures/checks/rustup-up-to-date.txt");
         assert!(rustup(&out(0, text, "")).unwrap().is_empty());
@@ -562,5 +685,25 @@ mod tests {
             parse: npm,
         };
         assert_eq!(execute(&spec), None);
+    }
+
+    /// Runs every check on this machine: `cargo test real_machine -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn real_machine() {
+        let steps: Vec<String> = SPECS
+            .iter()
+            .flat_map(|s| s.steps)
+            .map(|s| s.to_string())
+            .collect();
+        let checks = run(&steps);
+        for (step, outcome) in &checks.results {
+            let summary = match outcome {
+                Outcome::UpToDate => "up to date".to_string(),
+                Outcome::Waiting { items } => format!("{} waiting", items.len()),
+                Outcome::Failed { message } => format!("failed: {message}"),
+            };
+            println!("{step}: {summary}");
+        }
     }
 }
