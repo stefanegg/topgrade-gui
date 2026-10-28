@@ -6,6 +6,8 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+## 0.7.1 - 2026-10-28
+
 ### Fixed
 - Waiting Flatpak updates are checked per installation, so "Flatpak (user)" and "Flatpak (system)" no longer both list every update from both.
 
