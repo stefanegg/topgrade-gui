@@ -94,13 +94,20 @@ const SPECS: &[Spec] = &[
         parse: dnf,
     },
     Spec {
-        // Without --user/--system it covers every installation.
-        steps: &[
-            "Flatpak",
-            "Flatpak User Packages",
-            "Flatpak System Packages",
-        ],
+        // Without --user/--system it covers every installation, which is
+        // what topgrade's single "Flatpak" step updates.
+        steps: &["Flatpak"],
         command: "flatpak remote-ls --updates --columns=application,name,version",
+        parse: flatpak,
+    },
+    Spec {
+        steps: &["Flatpak User Packages"],
+        command: "flatpak remote-ls --user --updates --columns=application,name,version",
+        parse: flatpak,
+    },
+    Spec {
+        steps: &["Flatpak System Packages"],
+        command: "flatpak remote-ls --system --updates --columns=application,name,version",
         parse: flatpak,
     },
     Spec {
