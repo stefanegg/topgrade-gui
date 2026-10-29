@@ -6,6 +6,8 @@ The app shows this file in Settings.
 
 ## Unreleased
 
+## 0.8.0 - 2026-10-29
+
 ### Changed
 - Topgrade's own "finished" desktop notification is disabled for runs and update checks started from the app.
 
